@@ -1,0 +1,15 @@
+{
+  "name": "desert-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "dependencies": {
+    "protobufjs": "^6.9.0",
+    "uuid": "^8.0.0",
+    "ws": "^7.2.5"
+  }
+}
