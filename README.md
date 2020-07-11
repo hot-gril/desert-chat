@@ -1,5 +1,6 @@
 # desert-chat
-Desert Chat, easy and secure chat app with a uniquely open and simple design. Read the full design doc [here](https://docs.google.com/document/d/1BORD3gDLjhp_MjSfiBAAVqthWbmlx__7iy-Il8MSCx0/edit?usp=sharing), mainly just the first page. It's short.
+Desert Chat, easy and secure chat app with a uniquely open and simple design. \
+Read the full design doc [here](https://docs.google.com/document/d/1BORD3gDLjhp_MjSfiBAAVqthWbmlx__7iy-Il8MSCx0/edit?usp=sharing), mainly just the first page. It's short.
 
 WIP. Current implementation is text-only chat rooms with a lame CLI, but it exercises the basic design. Much more to come, like an actual GUI and video calls. Think of a room-based UI reminiscent of both Zoom and Whatsapp.
 
