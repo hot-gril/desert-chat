@@ -29,7 +29,7 @@ function handleSuccess(stream) {
       client.sendVideo(new Uint8Array(await event.data.arrayBuffer()))
     }
   }
-  mediaRecorder.start(1000);
+  mediaRecorder.start(100);
 }
 
 function handleError(error) {
@@ -96,4 +96,4 @@ async function joinRoom(invitationCode) {
   });
   await client.joinRoom(invitationCode)
 }
-joinRoom("CiRhNmExZDZhYy02MTNiLTRkZGQtOTM2MS04NGM4OWE5NjhhNTESDmxvY2FsaG9zdDoxNDUzGiB09/Lb/NG+NybjCW3wC58Ch5zbbAFvSAOOzp3xQ4hpTiIgXxpgNrFEy4m28hLG6uSLCbkg2Kk9G0/O4nLfTbeEkykqEPj0gIDixJDoK0KFjNieYFs=")
+joinRoom("CiRiNzQyMTllNy0xMGY4LTQ5NTEtYTlhZS0yYmIyNmNhNTMyNWYSDmxvY2FsaG9zdDoxNDUzGiCl7gKsXt4BNmK5ZUX+tSFoBgx1U3RknRG35qEnmCprGiIg5U3BYkQrdGccDvmCA5Vd3HmqyuNymmVC9RtFclXbulQqEJUOhdac9c6wnTP1lO/XQGQ=")
