@@ -1,6 +1,7 @@
-const DEBUG = true
-if (!DEBUG) {
-  console.debug = function() {}
+const DEBUG = false
+function debug() {
+  if (!DEBUG) return
+  console.debug(arguments)
 }
 
 var myHostname = "localhost:1453"
@@ -38,7 +39,7 @@ class Client {
       const data = event.data
       const bytes = new Uint8Array(await data.arrayBuffer())
       const message = this.proto.server.C2sResponse.decode(bytes)
-      console.debug(`${this.name()} rx from server: ${inspect(message)}`)
+      debug(`${this.name()} rx from server: ${inspect(message)}`)
       if (message.incomingDatagram && this.isInitialized()) {
         this.handleC2C(message)
       } else {
@@ -86,7 +87,7 @@ class Client {
       this.c2sCounter++
       this.pendingRequests[req.id] = resolve
       const buffer = this.proto.server.C2sRequest.encode(req).finish()
-      console.debug(`${this.name()} tx to server ${inspect(req)}`)
+      debug(`${this.name()} tx to server ${inspect(req)}`)
       this.ws.send(buffer)
       setTimeout(reject, timeout)
     }.bind(this))
@@ -144,7 +145,7 @@ class Client {
       signature,
       datagram,
     })
-    console.debug(`${this.name()} tx to another client: ${inspect(signedDatagram)}`)
+    debug(`${this.name()} tx to another client: ${inspect(signedDatagram)}`)
     const signedDatagramBytes = this.proto.client.SignedDatagram.encode(signedDatagram).finish()
     var boxed
     if (symmetricKey) {
@@ -206,7 +207,7 @@ class RoomMasterClient extends Client {
     const sd =
       this.proto.client.SignedDatagram.decode(signedDatagramData)
     const datagram = sd.datagram
-    console.debug(`${this.name()} rx from another client: ${inspect(datagram)}`)
+    debug(`${this.name()} rx from another client: ${inspect(datagram)}`)
 
     const hello = datagram.hello
     if (hello) {
@@ -342,7 +343,7 @@ class RoomParticipantClient extends Client {
       return
     }
 
-    console.debug(`${this.name()} rx from another client: ${inspect(datagram)}`)
+    debug(`${this.name()} rx from another client: ${inspect(datagram)}`)
     if (datagram.masterHello) {
       for (let sd of datagram.masterHello.participantHellos) {
         const dg = sd.datagram

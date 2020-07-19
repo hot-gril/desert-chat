@@ -12,6 +12,7 @@ const constraints = window.constraints = {
   audio: false,
   video: true
 };
+const mediaType = `video/webm;codecs=vp9`
 
 var client
 function handleSuccess(stream) {
@@ -22,7 +23,7 @@ function handleSuccess(stream) {
   window.stream = stream; // make variable available to browser console
   video.srcObject = stream;
 
-  var options = {mimeType: 'video/webm;codecs=vp8'};
+  var options = {mimeType: mediaType};
   const mediaRecorder = new MediaRecorder(stream, options);
   mediaRecorder.ondataavailable = async function(event) {
     if (event.data.size > 0 && client) {
@@ -76,24 +77,22 @@ async function joinRoom(invitationCode) {
 
   // https://stackoverflow.com/a/50354182
   // https://developer.mozilla.org/en-US/docs/Web/API/SourceBuffer
-  const ownCamera = document.querySelector('#own-camera');
+  const rxCamera = document.querySelector('#rx-camera');
   var mediaSource = new MediaSource();
-  ownCamera.src = URL.createObjectURL(mediaSource)
+  rxCamera.src = URL.createObjectURL(mediaSource)
   var sourceBuffer
   mediaSource.addEventListener("sourceopen", function() {
-    console.log("alecztest sourceopen")
-    sourceBuffer = mediaSource.addSourceBuffer("video/webm; codecs=\"vp8\"");
+    sourceBuffer = mediaSource.addSourceBuffer(mediaType);
     setTimeout(function() {
-      ownCamera.play();
-    }, 1000)
+      rxCamera.play();
+    }, 1000)  // TODO replace this with proper user interaction detection
     client.onReceiveVideo = function(senderHello, video) {
       console.info(`${client.name()} video from ${client.displayName(senderHello)}`)
-      //      sourceBuffer.addEventListener("updateend", function(_) {
-      //        ownCamera.play();
-      //      })
-      sourceBuffer.appendBuffer(video.buffer)
+      if (!sourceBuffer.updating) {
+        sourceBuffer.appendBuffer(video.buffer)
+      }
     }
   });
   await client.joinRoom(invitationCode)
 }
-joinRoom("CiRiNzQyMTllNy0xMGY4LTQ5NTEtYTlhZS0yYmIyNmNhNTMyNWYSDmxvY2FsaG9zdDoxNDUzGiCl7gKsXt4BNmK5ZUX+tSFoBgx1U3RknRG35qEnmCprGiIg5U3BYkQrdGccDvmCA5Vd3HmqyuNymmVC9RtFclXbulQqEJUOhdac9c6wnTP1lO/XQGQ=")
+joinRoom("CiQzNDYzOWUxNi04OTA3LTRiYmQtYjg3YS1mOWU4ZmQ1YWQ2ODYSDmxvY2FsaG9zdDoxNDUzGiAW/ePPJkmK8f1xpwNX4UpzNmZa1lCWYHD0ek7z5BjoCiIg0VrEjAF9OMAzAfXwWYAkWJDxMqdodtolb9xaJ4jNPFIqEPhdJhvV25IWX4dKMIZfHrk=")
