@@ -95,4 +95,4 @@ async function joinRoom(invitationCode) {
   });
   await client.joinRoom(invitationCode)
 }
-joinRoom("CiQzNDYzOWUxNi04OTA3LTRiYmQtYjg3YS1mOWU4ZmQ1YWQ2ODYSDmxvY2FsaG9zdDoxNDUzGiAW/ePPJkmK8f1xpwNX4UpzNmZa1lCWYHD0ek7z5BjoCiIg0VrEjAF9OMAzAfXwWYAkWJDxMqdodtolb9xaJ4jNPFIqEPhdJhvV25IWX4dKMIZfHrk=")
+joinRoom("CiQ2Yzc0MTJiZS1mZDBiLTQ3ZDMtODcyOC0wN2IzZjNiNjZhM2MSDmxvY2FsaG9zdDoxNDUzGiAZztPVea9zxwwnikFFLg5kSZjgBsy9BenuRU6WKvndLyIgEL5Cf5VK/vLCliGwByPImS2B2ZMKVFeniC3SHK7NGmoqELKEtTtK2TWkDWlQnFowbBM=")

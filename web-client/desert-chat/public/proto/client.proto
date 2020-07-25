@@ -1,0 +1,89 @@
+// Client-to-client protocol, always end-to-end encrypted.
+
+syntax = "proto3";
+
+package desert.client;
+
+message UserProfile {
+  string display_name = 1;
+}
+
+message RoomProfile {
+  string display_name = 1;
+}
+
+message Hello {
+  string uuid = 1;
+  string hostname = 2;
+
+  // Public, secures the libnacl boxes in the DM channel to this user.
+  bytes dm_signing_key = 3;
+  bytes dm_encryption_key = 4;
+
+  // Public, validates authorship. See SignedDatagram.
+  // Unfortunately, this can't be the same as dm_signing_key because for some reason
+  // libnacl's detached signatures use a different kind of key from its boxes.
+  bytes datagram_signing_key = 5;
+
+  string dm_channel_id = 6;
+  UserProfile user_profile = 7;
+  RoomProfile room_profile = 8;
+}
+
+message MasterHello {
+  // Symmetric, secures the libnacl secretboxes to the room channel.
+  bytes room_key = 1;
+
+  string room_channel_id = 2;
+  RoomProfile room_profile = 3;
+  repeated SignedDatagram participant_hellos = 4;
+}
+
+message RoomInvitation {
+  string dm_channel_id = 1;
+  string dm_hostname= 2;
+
+  // Public, secures the libnacl boxes in the DM channel to the room master.
+  bytes dm_signing_key = 3;
+  bytes dm_encryption_key = 4;
+
+  // Symmetric. Not known to server, so server can't join as a user.
+  // (Probably the DM keys are already random enough to be unguessable, but thou shalt
+  //  only use cryptographic keys for their single intended purpose.)
+  bytes invitation_key = 5;
+
+  RoomProfile room_profile_preview = 6;
+}
+
+message Text {
+  string body = 1;
+}
+
+message Video {
+  bytes buffer = 1;
+}
+
+message Datagram {
+  bytes nonce = 1;  // Same as nonce in C2S Datagram
+
+  // No gaps.
+  // Establishes both completeness and per (client, channel) ordering.
+  int64 sequence_number = 2;
+
+  oneof type {
+    Hello hello = 3;
+    MasterHello master_hello = 4;
+    Text text = 5; 
+    Video video = 6; 
+  }
+}
+
+// The DM and room channels are already signed and encrypted,
+// but everyone in the room has the same signing key, so within
+// that envelope we also need the author to sign its messages.
+// Also, the room master relays participants' hellos via DMs,
+// and that needs to be tamper-resistant.
+message SignedDatagram {
+  bytes signature = 1;  // libnacl detached signature of the datagram's serialized proto.
+  Datagram datagram = 2;
+}
