@@ -3,6 +3,12 @@ const protobuf = require("protobufjs");
 const uuid = require("uuid");
 const util = require("util");
 
+const DEBUG = false
+const debug = function() {
+  if (!DEBUG) return
+  console.debug(arguments)
+}
+
 class Pubsub {
   constructor() {
     this._topics = {}  // topic -> clientId -> callback
@@ -11,7 +17,7 @@ class Pubsub {
 
   // f takes (message, sequence_number)
   sub(topic, clientId, f) {
-    console.debug("sub", {topic, clientId})
+    debug("sub", {topic, clientId})
     if (this._topics[topic] === undefined) {
       this._topics[topic] = {}
     }
@@ -19,14 +25,14 @@ class Pubsub {
   }
 
   unsub(topic, clientId) {
-    console.debug("unsub", {topic, clientId})
+    debug("unsub", {topic, clientId})
     if (this._topics[topic]) {
       delete this._topics[topic][clientId]
     }
   }
 
   async pub(sender, topic, msg) {
-    console.debug("pub", {topic, msg})
+    debug("pub", {topic, msg})
     if (this._topics[topic] === undefined) return
     const seq = this._topic_seq[topic] || 0
     this._topic_seq[topic] = seq + 1
@@ -47,19 +53,19 @@ const verifyProto = function(type, proto) {
 
 const handleClient = async function(ws, proto) {
   const clientId = uuid.v4();
-  console.debug("handleClient", {clientId})
+  debug("handleClient", {clientId})
 
   const topics = {}
 
   const tx = function(msg) {
-    console.debug("tx", {clientId, msg})
+    debug("tx", {clientId, msg})
     verifyProto(proto.C2sResponse, msg)
     const buffer = proto.C2sResponse.encode(msg).finish()
     ws.send(buffer)
   }
 
   const handlePubsubRx = async function(msg, seq) {
-    console.debug("handlePubsubRx", {clientId, msg})
+    debug("handlePubsubRx", {clientId, msg})
     const msgCopy = proto.Datagram.create(msg)
     msgCopy.sequenceNumber = seq
     const resp = proto.C2sResponse.create({
@@ -69,7 +75,7 @@ const handleClient = async function(ws, proto) {
   }
 
   ws.on("close", function() {
-    console.debug("close", {clientId})
+    debug("close", {clientId})
     for (let topic of Object.keys(topics)) {
       pubsub.unsub(topic, clientId)
     }
@@ -78,7 +84,7 @@ const handleClient = async function(ws, proto) {
   ws.on("message", function incoming(data) {
     var bytes = Array.prototype.slice.call(data, 0)
     var message = proto.C2sRequest.decode(bytes)
-    console.debug("message", {clientId, message})
+    debug("message", {clientId, message})
 
     if (message.createChannel) {
       const channelId = uuid.v4();
@@ -120,7 +126,7 @@ const handleClient = async function(ws, proto) {
 }
 
 const f = async function() {
-  console.debug("starting")
+  debug("starting")
   const root = await protobuf.load("../proto/server.proto")
   const proto = {
     root,
@@ -136,25 +142,25 @@ const f = async function() {
     UnsubResponse: root.lookupType("desert.server.UnsubResponse"),
     Datagram: root.lookupType("desert.server.Datagram"),
   }
-  console.debug("loaded proto")
+  debug("loaded proto")
 
 	function noop() {}
 	function heartbeat() {
 		this.isAlive = true;
 	}
 	const wss = new WebSocket.Server({ port: 1453 });
-  console.debug("started server")
+  debug("started server")
   wss.on('connection', function connection(ws) {
-    console.debug("New connection")
+    debug("New connection")
 		ws.isAlive = true;
     ws.on('pong', heartbeat);
     handleClient(ws, proto)
 	});
 	const interval = setInterval(function ping() {
-    console.debug("Checking for dead connections")
+    debug("Checking for dead connections")
 		wss.clients.forEach(function each(ws) {
       if (ws.isAlive === false) {
-        console.debug("Cleaning up dead connection")
+        debug("Cleaning up dead connection")
         return ws.terminate();
       }
 

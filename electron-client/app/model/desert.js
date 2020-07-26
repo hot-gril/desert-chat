@@ -40,7 +40,18 @@ class Client {
     this.signPair = nacl.box.keyPair()
     this.encryptPair = nacl.box.keyPair()
     this.dmChannelId = undefined
+  }
 
+  isInitialized() {
+    return this.dmChannelId !== undefined
+  }
+
+  checkInitialized() {
+    if (!this.isInitialized()) throw "uninitialized"
+  }
+
+  async init() {
+    console.info("Initializing client " + this.uuid)
     this.ws.onmessage = async function(event) {
       const data = event.data
       const bytes = new Uint8Array(await data.arrayBuffer())
@@ -58,18 +69,6 @@ class Client {
         f(message)
       }
     }.bind(this)
-  }
-
-  isInitialized() {
-    return this.dmChannelId !== undefined
-  }
-
-  checkInitialized() {
-    if (!this.isInitialized()) throw "uninitialized"
-  }
-
-  async init() {
-    console.info("Initializing client " + this.uuid)
     if (this.isInitialized()) return
     const dmChannelId = await this.createChannel()
     if (this.isInitialized()) return  // checks again in case of concurrent initialization
@@ -250,8 +249,8 @@ class RoomMasterClient extends Client {
 }
 
 class RoomParticipantClient extends Client {
-  constructor(proto, ws, hostname, userProfile) {
-    super(proto, ws, hostname)
+  constructor(proto, userProfile) {
+    super(proto, null, null)
     this.userProfile = userProfile
     this.roomKeys = []  // From oldest to newest.
     this.roomProfile = undefined
@@ -378,12 +377,14 @@ class RoomParticipantClient extends Client {
   }
 
   async joinRoom(invitationCode) {
-    this.checkInitialized()
     if (this.isInRoom()) throw "already in a room"
     const invitationBytes = naclUtil.decodeBase64(invitationCode)
     const invitationProto = this.proto.client.RoomInvitation.decode(invitationBytes)
+    this.hostname = invitationProto.dmHostname
+    this.ws = await newSocket(this.hostname)
     this.roomInvitation = invitationProto
     this.roomMasterPubSigningKey = Buffer.from(invitationProto.dmSigningKey)
+    await this.init()
     const datagram = this.proto.client.Datagram.create({
       hello: this.hello,
     })
@@ -460,9 +461,9 @@ const setup = async function() {
 }
 
 var proto
-async function makeParticipantClient(hostname) {
+async function makeParticipantClient() {
   if (!proto) proto = await setup()
-  return new RoomParticipantClient(proto, await newSocket(hostname), hostname)
+  return new RoomParticipantClient(proto)
 }
 async function makeMasterClient(hostname) {
   if (!proto) proto = await setup()
