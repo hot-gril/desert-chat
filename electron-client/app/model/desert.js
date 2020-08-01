@@ -10,8 +10,6 @@ function debug() {
   console.debug(arguments)
 }
 
-var myHostname = "localhost:1453"
-
 const inspect = function(obj) {
   return JSON.stringify(obj)
 }
