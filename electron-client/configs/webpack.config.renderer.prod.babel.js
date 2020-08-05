@@ -169,9 +169,9 @@ export default merge(baseConfig, {
           },
         },
       },
-      // Common Image Formats
+      // Common Media Formats
       {
-        test: /\.(?:ico|gif|png|jpg|jpeg|webp)$/,
+        test: /\.(?:ico|gif|png|jpg|jpeg|webp|mp3)$/,
         use: 'url-loader',
       },
     ],

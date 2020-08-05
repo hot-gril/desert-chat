@@ -7,15 +7,24 @@ const common = require("./common")
 const desert = require("../model/desert")
 const electron = require("electron")
 const BrowserWindow = electron.remote.BrowserWindow
+import {Launcher} from 'react-chat-window'
 
-class RoomDialog extends React.Component {
+class TextRoom extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
       client: undefined,
+      messageList: []
     };
     this.handleError = this.handleError.bind(this)
     this.checkClient = this.checkClient.bind(this)
+  }
+
+  async _onMessageWasSent(message) {
+    this.setState({
+      messageList: [...this.state.messageList, message]
+    })
+    await this.state.client.sendText(message.data.text)
   }
 
   handleError(e) {
@@ -24,14 +33,20 @@ class RoomDialog extends React.Component {
 
   async checkClient() {
     try {
-    if (this.state.client === undefined) {
-      const params = queryString.parse(location.hash.split("?")[1])
-      const invitationCode = params.invitationCode.replaceAll(' ','')
-      console.log("invitation code: " + invitationCode)
-      const client = await desert.makeParticipantClient()
-      await client.joinRoom(invitationCode)
-      this.setState({client})
-    }
+      if (this.state.client === undefined) {
+        const client = await desert.makeParticipantClient()
+        await client.joinRoom(this.props.invitationCode)
+        client.onReceiveText = function(senderHello, text) {
+          this.setState({
+            messageList: [...this.state.messageList, {
+              author: "other",
+              type: "text",
+              data: { text: text.body },
+            }]
+          })
+        }.bind(this)
+        this.setState({client})
+      }
     } catch(err) {
       console.error({err})
       this.handleError(err)
@@ -42,17 +57,40 @@ class RoomDialog extends React.Component {
   render() {
     this.checkClient()
     return (
-      <div style={{width: "50%", backgroundColor: "green"}}>
-          <form onSubmit={this.handleSubmit}>
-              <label>
-                {"test"}
-                <div style={{width: "50%"}}>
-                  <textarea value={this.state.invitationCode}
-                    onChange={this.handleChange}/>
-                </div>
-              </label>
-            <input type="submit" value="Submit" />
-          </form>
+      <div>
+        <Launcher
+        agentProfile={{
+          teamName: 'react-chat-window',
+          imageUrl: 'https://a.slack-edge.com/66f9/img/avatars-teams/ava_0001-34.png'
+        }}
+        onMessageWasSent={this._onMessageWasSent.bind(this)}
+        messageList={this.state.messageList}
+        showEmoji
+      />
+      </div>
+    );
+  }
+}
+
+class RoomDialog extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      client: undefined,
+    };
+    this.handleError = this.handleError.bind(this)
+    const params = queryString.parse(location.hash.split("?")[1])
+    this.invitationCode = params.invitationCode.replaceAll(' ','')
+  }
+
+  handleError(e) {
+    alert(e)
+  }
+
+  render() {
+    return (
+      <div>
+      <TextRoom invitationCode={this.invitationCode} />
       </div>
     );
   }
