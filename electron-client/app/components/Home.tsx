@@ -35,14 +35,16 @@ class JoinDialog extends React.Component {
 
   async joinRoom(code) {
     try {
-      const client = await desert.makeParticipantClient()
-      await client.joinRoom(code)
-      const win = new BrowserWindow({ width: 400, height: 400} )
+      var win = new BrowserWindow({
+        width: 400, height: 400,
+        webPreferences: { nodeIntegration: true}
+      } )
+      win.invitationCode = code
       win.on('close', function () { win = null })
-      win.loadURL("/room")
+      win.loadURL(`file://${__dirname}/app.html#${routes.ROOM}?invitationCode=${encodeURIComponent(code)}`)
       win.show()
     } catch(e) {
-      handleError(e)
+      this.handleError(e)
     }
   }
 

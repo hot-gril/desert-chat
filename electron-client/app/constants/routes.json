@@ -1,5 +1,5 @@
 {
   "HOME": "/",
-  "COUNTER": "/counter",
-  "ROOM": "/room"
+  "ROOM": "/room",
+  "TEXTROOM": "/textroom"
 }
