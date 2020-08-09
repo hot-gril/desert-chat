@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import routes from '../constants/routes.json';
-import styles from './Home.css';
 const queryString = require('query-string');
 const common = require("./common")
 const desert = require("../model/desert")
@@ -32,6 +31,7 @@ class TextRoom extends React.Component {
   }
 
   async checkClient() {
+    if (!this.props.invitationCode) return
     try {
       if (this.state.client === undefined) {
         const client = await desert.makeParticipantClient()
@@ -39,7 +39,7 @@ class TextRoom extends React.Component {
         client.onReceiveText = function(senderHello, text) {
           this.setState({
             messageList: [...this.state.messageList, {
-              author: "other",
+              author: common.userName(senderHello),
               type: "text",
               data: { text: text.body },
             }]
@@ -57,7 +57,7 @@ class TextRoom extends React.Component {
   render() {
     this.checkClient()
     return (
-      <div>
+      <div style={{}}>
         <Launcher
         agentProfile={{
           teamName: 'react-chat-window',
@@ -80,7 +80,7 @@ class RoomDialog extends React.Component {
     };
     this.handleError = this.handleError.bind(this)
     const params = queryString.parse(location.hash.split("?")[1])
-    this.invitationCode = params.invitationCode.replaceAll(' ','')
+    this.invitationCode = (params.invitationCode || "").replaceAll(' ','')
   }
 
   handleError(e) {

@@ -23,6 +23,7 @@ export default function Routes() {
     <App>
       <Switch>
         <Route path={routes.ROOM} component={RoomPage} />
+        <Route path={routes.HOME} component={RoomPage} />
         <Route path={routes.TEXTROOM} component={TextRoomPage} />
         <Route path={routes.HOME} component={HomePage} />
       </Switch>
