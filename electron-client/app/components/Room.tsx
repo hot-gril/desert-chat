@@ -37,6 +37,7 @@ class TextRoom extends React.Component {
         const client = await desert.makeParticipantClient()
         await client.joinRoom(this.props.invitationCode)
         client.onReceiveText = function(senderHello, text) {
+          console.log(`Message from ${common.userName(senderHello)}: ${text}`)
           this.setState({
             messageList: [...this.state.messageList, {
               author: common.userName(senderHello),
