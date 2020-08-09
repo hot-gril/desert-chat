@@ -1,5 +1,6 @@
 const colors = {
   offBlack: "#333333",
+  text: "white",
 }
 
 userName = function(hello) {

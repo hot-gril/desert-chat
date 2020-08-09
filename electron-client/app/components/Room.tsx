@@ -14,23 +14,18 @@ class TextRoom extends React.Component {
     this.state = {
       client: undefined,
       messages: [],
+      composingText: "",
     };
     this.handleError = this.handleError.bind(this)
     this.checkClient = this.checkClient.bind(this)
     this.renderMessage = this.renderMessage.bind(this)
+    this.handleChange = this.handleChange.bind(this)
+    this.handleSubmit = this.handleSubmit.bind(this)
   }
 
   handleError(e) {
     console.error({e})
     alert(e)
-  }
-
-  async sendMessage(body) {
-    try {
-      await this.state.client.sendText(body)
-    } catch(err) {
-      this.handleError(err)
-    }
   }
 
   async checkClient() {
@@ -57,22 +52,46 @@ class TextRoom extends React.Component {
     console.log("renderMessage", {msg, idx})
     return (
       <li key={idx}>
-        <b>{common.userName(msg.senderHello)}</b> (<span>{msg.text.body}</span>)
+        <b style={{fontFamily: "monospace"}}>
+          {common.userName(msg.senderHello)}:
+        </b>
+        {" "}
+        <span style={{fontFamily: "sans-serif"}}>
+          {msg.text.body}
+        </span>
       </li>
     )
+  }
+
+  async handleSubmit(event) {
+    try {
+      await this.state.client.sendText(body)
+    } catch(err) {
+      this.handleError(err)
+    }
+  }
+
+  handleChange(event) {
+    this.setState({composingText: event.target.value})
   }
 
   render() {
     this.checkClient()
     return (
-      <div style={{color: "white"}}>
-        <ul>
+      <div style={{color: common.c.text}}>
+        <ul style={{listStyle: "none"}}>
           <FlatList
             list={this.state.messages}
             renderItem={this.renderMessage}
             renderWhenEmpty={() => <div>List is empty!</div>}
           /> 
       </ul>
+
+          <form onSubmit={this.handleSubmit}>
+              <textarea value={this.state.composingText}
+                onChange={this.handleChange}/>
+            <input type="submit" value="Submit" />
+          </form>
       </div>
     );
   }
