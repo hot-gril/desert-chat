@@ -6,28 +6,31 @@ const common = require("./common")
 const desert = require("../model/desert")
 const electron = require("electron")
 const BrowserWindow = electron.remote.BrowserWindow
-import {Launcher} from 'react-chat-window'
+import FlatList from 'flatlist-react';
 
 class TextRoom extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
       client: undefined,
-      messageList: []
+      messages: [],
     };
     this.handleError = this.handleError.bind(this)
     this.checkClient = this.checkClient.bind(this)
-  }
-
-  async _onMessageWasSent(message) {
-    this.setState({
-      messageList: [...this.state.messageList, message]
-    })
-    await this.state.client.sendText(message.data.text)
+    this.renderMessage = this.renderMessage.bind(this)
   }
 
   handleError(e) {
+    console.error({e})
     alert(e)
+  }
+
+  async sendMessage(body) {
+    try {
+      await this.state.client.sendText(body)
+    } catch(err) {
+      this.handleError(err)
+    }
   }
 
   async checkClient() {
@@ -37,37 +40,39 @@ class TextRoom extends React.Component {
         const client = await desert.makeParticipantClient()
         await client.joinRoom(this.props.invitationCode)
         client.onReceiveText = function(senderHello, text) {
-          console.log(`Message from ${common.userName(senderHello)}: ${text}`)
-          this.setState({
-            messageList: [...this.state.messageList, {
-              author: common.userName(senderHello),
-              type: "text",
-              data: { text: text.body },
-            }]
-          })
+          console.log(`Message from ${common.userName(senderHello)}: ${text.body}`)
+          const messages = this.state.messages
+          messages.push({senderHello, text})
+          this.setState({messages})
         }.bind(this)
         this.setState({client})
       }
     } catch(err) {
-      console.error({err})
       this.handleError(err)
       this.setState({client: null})
     }
   }
 
+  renderMessage(msg, idx) {
+    console.log("renderMessage", {msg, idx})
+    return (
+      <li key={idx}>
+        <b>{common.userName(msg.senderHello)}</b> (<span>{msg.text.body}</span>)
+      </li>
+    )
+  }
+
   render() {
     this.checkClient()
     return (
-      <div style={{}}>
-        <Launcher
-        agentProfile={{
-          teamName: 'react-chat-window',
-          imageUrl: 'https://a.slack-edge.com/66f9/img/avatars-teams/ava_0001-34.png'
-        }}
-        onMessageWasSent={this._onMessageWasSent.bind(this)}
-        messageList={this.state.messageList}
-        showEmoji
-      />
+      <div style={{color: "white"}}>
+        <ul>
+          <FlatList
+            list={this.state.messages}
+            renderItem={this.renderMessage}
+            renderWhenEmpty={() => <div>List is empty!</div>}
+          /> 
+      </ul>
       </div>
     );
   }
