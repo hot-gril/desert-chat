@@ -110,7 +110,7 @@ class TextRoom extends React.Component {
     this.checkClient()
     return (
       <div style={{color: common.c.text}}>
-        <div style={{overflowY: "scroll", height: "80vh", padding: 10}}>
+        <div style={{overflowY: "scroll", height: "calc(100vh - 50px)", padding: 10}}>
           <ul style={{listStyle: "none", margin: 0, padding: 0}}>
             <FlatList
               list={this.state.messages}
