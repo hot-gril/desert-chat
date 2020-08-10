@@ -285,6 +285,7 @@
     "protobufjs": "^6.10.1",
     "query-string": "^6.13.1",
     "react": "^16.13.1",
+    "react-chat-elements": "^10.9.3",
     "react-dom": "^16.13.1",
     "react-hot-loader": "^4.12.21",
     "react-redux": "^7.2.0",

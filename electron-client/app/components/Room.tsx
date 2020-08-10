@@ -6,7 +6,7 @@ const common = require("./common")
 const desert = require("../model/desert")
 const electron = require("electron")
 const BrowserWindow = electron.remote.BrowserWindow
-import FlatList from 'flatlist-react';
+import { MessageList, Input, Button } from 'react-chat-elements'
 
 const kSelf = "self"
 
@@ -110,29 +110,23 @@ class TextRoom extends React.Component {
     this.checkClient()
     return (
       <div style={{color: common.c.text}}>
-        <div style={{overflowY: "scroll", height: 600, padding: 10}}>
-          <ul style={{listStyle: "none", margin: 0, padding: 0}}>
-            <FlatList
-              list={this.state.messages}
-              renderItem={this.renderMessage}
-              groupOf={1}
-              groupSeparator={this.renderSeparator}
-              renderWhenEmpty={() => <div>No chat messages yet.</div>}/> 
-          </ul>
-        </div>
-        <br/>
-        <div style={{width: "96%", background: common.c.black,
-            position: "fixed", left: 0, bottom: 0, height: 50, padding: "2%"}}>
-          <form onSubmit={this.handleSubmit}>
-            <div style={{display: "flex", flexDirection: "column", justifyContent: "flex-end"}}>
-              <textarea
-                style={{resize: "none"}}
-                value={this.state.composingText}
-                onChange={this.handleChange}/>
-              <input type="submit" value="Send" />
-            </div>
-          </form>
-        </div>
+        <MessageList
+          className='message-list'
+          lockable={true}
+          toBottomHeight={'100%'}
+          dataSource={[
+            {
+              position: 'right',
+              type: 'text',
+              text: 'Lorem ipsum dolor sit amet, consectetur adipisicing elit',
+              date: new Date(),
+            },
+            ]} />
+          <br/>
+          <Input
+            placeholder="Type here..."
+            multiline={true}
+            />
       </div>
     );
   }
