@@ -1,5 +1,6 @@
 const colors = {
   offBlack: "#333333",
+  black: "black",
   text: "white",
 }
 
