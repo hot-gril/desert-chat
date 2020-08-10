@@ -51,12 +51,13 @@ class JoinDialog extends React.Component {
   render() {
     return (
       <div>
-        <div style={{width: "50%"}}>
+        <div style={{color: common.c.text, padding: 10}}>
           <form onSubmit={this.handleSubmit}>
               <label>
                 Invitation code:
-                <div style={{width: "50%"}}>
-                  <textarea value={this.state.invitationCode}
+                <div style={{display: "flex"}}>
+                  <textarea style={{resize: "none", width: "100%"}}
+                    value={this.state.invitationCode}
                     onChange={this.handleChange}/>
                 </div>
               </label>
@@ -70,7 +71,7 @@ class JoinDialog extends React.Component {
 
 export default function Home(): JSX.Element {
   return (
-    <div style={{backgroundColor: common.c.offBlack}}>
+    <div style={{backgroundColor: common.c.offBlack, position: "fixed", width: "100%", height: "100%", bottom: 0, left: 0}}>
       <JoinDialog />
     </div>
   );
