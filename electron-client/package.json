@@ -56,6 +56,7 @@
     "appId": "org.develar.ElectronReact",
     "files": [
       "dist/",
+      "app/proto/",
       "node_modules/",
       "app.html",
       "main.prod.js",
@@ -249,7 +250,6 @@
     "opencollective-postinstall": "^2.0.3",
     "optimize-css-assets-webpack-plugin": "^5.0.3",
     "prettier": "^2.0.5",
-    "react-scripts": "^3.4.1",
     "react-test-renderer": "^16.12.0",
     "redux-logger": "^3.0.6",
     "rimraf": "^3.0.0",
@@ -295,8 +295,7 @@
     "source-map-support": "^0.5.19",
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
-    "uuid": "^8.2.0",
-    "yarn": "^1.22.4"
+    "uuid": "^8.2.0"
   },
   "devEngines": {
     "node": ">=7.x",

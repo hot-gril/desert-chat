@@ -41,7 +41,8 @@ class JoinDialog extends React.Component {
       } )
       win.invitationCode = code
       win.on('close', function () { win = null })
-      win.loadURL(`file://${__dirname}/app.html#${routes.ROOM}?invitationCode=${encodeURIComponent(code)}`)
+      //win.loadURL(`file://${__dirname}/app.html#${routes.ROOM}?invitationCode=${encodeURIComponent(code)}`)
+      win.loadURL(`file:///Applications/ElectronReact.app/Contents/Resources/app.asar/app.html#${routes["ROOM"]}?invitationCode=${encodeURIComponent(code)}`)
       win.show()
     } catch(e) {
       this.handleError(e)
