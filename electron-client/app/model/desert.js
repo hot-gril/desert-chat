@@ -424,8 +424,8 @@ class RoomParticipantClient extends Client {
 const setup = async function() {
   console.debug("Loading proto definitions...")
 
-  const serverRoot = await protobuf.load("./proto/server.proto")
-  const clientRoot = await protobuf.load("./proto/client.proto")
+  const serverRoot = await protobuf.load("./dist/proto/server.proto")
+  const clientRoot = await protobuf.load("./dist/proto/client.proto")
   const proto = {
     client: {
       root: clientRoot,

@@ -3,10 +3,3 @@
  *        See https://github.com/webpack-contrib/sass-loader#imports
  */
 @import '~@fortawesome/fontawesome-free/css/all.css';
-@import "~react-chat-window/lib/styles/chat-window.css";
-@import "~react-chat-window/lib/styles/launcher.css";
-@import "~react-chat-window/lib/styles/emojiPicker.css";
-@import "~react-chat-window/lib/styles/header.css";
-@import "~react-chat-window/lib/styles/message.css";
-@import "~react-chat-window/lib/styles/popup-window.css";
-@import "~react-chat-window/lib/styles/user-input.css";

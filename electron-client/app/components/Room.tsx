@@ -31,6 +31,10 @@ class TextRoom extends React.Component {
     alert(e)
   }
 
+  componentDidMount() {
+    this.textInput.focus()
+  }
+
   async checkClient() {
     if (!this.props.invitationCode) return
     try {
@@ -88,6 +92,7 @@ class TextRoom extends React.Component {
   }
 
   async handleSubmit(event) {
+    event.preventDefault()
     const body = this.state.composingText
     if ((body || "").replaceAll(' ','').length <= 0) {
       return
@@ -125,7 +130,9 @@ class TextRoom extends React.Component {
             position: "fixed", left: 0, bottom: 0, height: 50, padding: "2%"}}>
           <form onSubmit={this.handleSubmit}>
             <div style={{display: "flex", flexDirection: "column", justifyContent: "flex-end"}}>
-              <textarea
+              <input
+                type="text"
+                ref={el => this.textInput = el}
                 style={{resize: "none"}}
                 value={this.state.composingText}
                 onChange={this.handleChange}/>
