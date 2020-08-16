@@ -4,9 +4,11 @@ const colors = {
   text: "white",
 }
 
-userName = function(hello) {
-  return (hello.user_profile || {}).display_name
-    || "anon " + hello.uuid.substr(0, 7)
+userName = function(hello, identity) {
+  hello = hello || {}
+  identity = identity || {}
+  return (hello.userProfile || {}).displayName || identity.displayName
+    || ("anon " + (hello.uuid || identity.uuid).substr(0, 7))
 }
 
 module.exports = {

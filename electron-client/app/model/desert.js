@@ -26,18 +26,21 @@ function newSocket(hostname) {
 
 // abstract
 class Client {
-  constructor(proto, ws, hostname) {
+  constructor(proto, ws, hostname, options) {
+    this.options = options || {}
     this.proto = proto
     this.ws = ws
-    this.uuid = uuid.v4();
     this.hostname = hostname
     this.pendingRequests = {}
     this.c2sCounter = 0  // Client-to-server sequence number.
     this.c2cCounters = {}  // Map from destination channel ID to integer.
-    this.datagramSignPair = nacl.sign.keyPair()
     this.signPair = nacl.box.keyPair()
     this.encryptPair = nacl.box.keyPair()
     this.dmChannelId = undefined
+    this.identity = options.identity || makeIdentity()
+    this.identity.datagramSignPair.publicKey = new Uint8Array(this.identity.datagramSignPair.publicKey)
+    this.identity.datagramSignPair.secretKey = new Uint8Array(this.identity.datagramSignPair.secretKey)
+    console.log("identity", this.identity, {options})
   }
 
   isInitialized() {
@@ -49,7 +52,7 @@ class Client {
   }
 
   async init() {
-    console.info("Initializing client " + this.uuid)
+    console.info("Initializing client " + this.identity.uuid)
     this.ws.onmessage = async function(event) {
       const data = event.data
       const bytes = new Uint8Array(await data.arrayBuffer())
@@ -71,7 +74,7 @@ class Client {
     const dmChannelId = await this.createChannel()
     if (this.isInitialized()) return  // checks again in case of concurrent initialization
     this.dmChannelId = dmChannelId
-    console.info("Finished initializing client " + this.uuid)
+    console.info("Finished initializing client " + this.identity.uuid)
   }
 
   // for debugging
@@ -143,7 +146,7 @@ class Client {
     const nonce = nacl.randomBytes(nacl.secretbox.nonceLength)
     datagram.nonce = nonce
     const datagramBytes = this.proto.client.Datagram.encode(datagram).finish()
-    const signature = nacl.sign.detached(datagramBytes, this.datagramSignPair.secretKey)
+    const signature = nacl.sign.detached(datagramBytes, this.identity.datagramSignPair.secretKey)
     const signedDatagram = this.proto.client.SignedDatagram.create({
       signature,
       datagram,
@@ -158,7 +161,7 @@ class Client {
         Buffer.from(encryptionKey), Buffer.from(this.signPair.secretKey))
     }
     const c2sDatagram = this.proto.server.Datagram.create({
-      dstHostname: hostname, nonce, payload: boxed, srcUuid: this.uuid,
+      dstHostname: hostname, nonce, payload: boxed, srcUuid: this.identity.uuid,
       dstChannelId: channelId
     })
     if (includeIdentity) c2sDatagram.srcPublicSigningKey = this.signPair.publicKey
@@ -197,7 +200,7 @@ class RoomMasterClient extends Client {
   }
 
   name() {
-    return `[RoomMasterClient ${this.uuid}]`
+    return `[RoomMasterClient ${this.identity.uuid}]`
   }
 
   async handleC2C(message) {
@@ -247,9 +250,8 @@ class RoomMasterClient extends Client {
 }
 
 class RoomParticipantClient extends Client {
-  constructor(proto, userProfile) {
-    super(proto, null, null)
-    this.userProfile = userProfile
+  constructor(proto, options) {
+    super(proto, null, null, options)
     this.roomKeys = []  // From oldest to newest.
     this.roomProfile = undefined
     this.roomMasterPubSigningKey = undefined
@@ -258,16 +260,19 @@ class RoomParticipantClient extends Client {
 
   async init() {
     await super.init()
+    const userProfile = this.proto.client.UserProfile.create({
+      displayName: (this.options.identity || {}).displayName,
+    })
     this.hello = this.proto.client.Hello.create({
-      uuid: this.uuid,
+      uuid: this.identity.uuid,
       hostname: this.hostname,
-      datagramSigningKey: this.datagramSignPair.publicKey,
+      datagramSigningKey: this.identity.datagramSignPair.publicKey,
       dmSigningKey: this.signPair.publicKey,
       dmEncryptionKey: this.encryptPair.publicKey,
       dmChannelId: this.dmChannelId,
-      userProfile: this.userProfile,
+      userProfile: userProfile,
     })
-    this.hellos[this.uuid] = this.hello
+    this.hellos[this.identity.uuid] = this.hello
   }
 
   isInRoom() {
@@ -281,7 +286,7 @@ class RoomParticipantClient extends Client {
   }
 
   name() {
-    return `[RoomParticipantClient ${this.uuid}]`
+    return `[RoomParticipantClient ${this.identity.uuid}]`
   }
 
   onReceiveText(senderHello, text) {
@@ -459,16 +464,24 @@ const setup = async function() {
 }
 
 var proto
-async function makeParticipantClient() {
+async function makeParticipantClient(options) {
   if (!proto) proto = await setup()
-  return new RoomParticipantClient(proto)
+  return new RoomParticipantClient(proto, options)
 }
 async function makeMasterClient(hostname) {
   if (!proto) proto = await setup()
   return new RoomMasterClient(proto, await newSocket(hostname), hostname)
 }
+function makeIdentity() {
+  return {
+    uuid: uuid.v4(),
+    displayName: "",
+    datagramSignPair: nacl.sign.keyPair(),
+  }
+}
 
 module.exports = {
   makeParticipantClient,
   makeMasterClient,
+  makeIdentity,
 }

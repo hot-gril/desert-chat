@@ -36,11 +36,12 @@ class TextRoom extends React.Component {
   }
 
   async checkClient() {
-    if (!this.props.invitationCode) return
+    if (!this.props.options) return
     try {
       if (this.state.client === undefined) {
-        const client = await desert.makeParticipantClient()
-        await client.joinRoom(this.props.invitationCode)
+        console.log("options", this.props.options)
+        const client = await desert.makeParticipantClient(this.props.options)
+        await client.joinRoom(this.props.options.invitationCode)
         client.onReceiveText = function(senderHello, text) {
           console.log(`Message from ${common.userName(senderHello)}: ${text.body}`)
           const messages = this.state.messages
@@ -63,7 +64,7 @@ class TextRoom extends React.Component {
 
   renderMessage(msg, idx) {
     var justify
-    const isSelf = (msg.senderHello === kSelf)
+    const isSelf = (msg.senderHello === kSelf || msg.senderHello.uuid == (this.props.options.identity || {}).uuid)
     return (
       <li key={idx}>
         <div style={{display: "flex", justifyContent: isSelf ? "flex-end" : "flex-start"}}>
@@ -105,6 +106,7 @@ class TextRoom extends React.Component {
     const messages = this.state.messages
     messages.push({senderHello: kSelf, text: {body}})
     this.setState({composingText: "", messages})
+    this.scrollView.scrollTop = this.scrollView.scrollHeight - this.scrollView.clientHeight
   }
 
   handleChange(event) {
@@ -115,7 +117,7 @@ class TextRoom extends React.Component {
     this.checkClient()
     return (
       <div style={{color: common.c.text}}>
-        <div style={{overflowY: "scroll", height: "calc(100vh - 50px)", padding: 10}}>
+        <div ref={el => this.scrollView = el} style={{overflowY: "scroll", height: "calc(100vh - 105px)", padding: 10}}>
           <ul style={{listStyle: "none", margin: 0, padding: 0}}>
             <FlatList
               list={this.state.messages}
@@ -149,7 +151,7 @@ class RoomDialog extends React.Component {
   constructor(props) {
     super(props);
     const params = queryString.parse(location.hash.split("?")[1])
-    this.invitationCode = (params.invitationCode || "").replaceAll(' ','')
+    this.options = JSON.parse(params.options)
   }
 
   handleError(e) {
@@ -159,7 +161,7 @@ class RoomDialog extends React.Component {
   render() {
     return (
       <div>
-      <TextRoom invitationCode={this.invitationCode} />
+      <TextRoom options={this.options} />
       </div>
     );
   }
