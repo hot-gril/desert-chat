@@ -16,7 +16,7 @@ if (!DEBUG) {
   console.debug = function() {}
 }
 
-var myHostname = "localhost:1453"
+var myHostname = "desert-chat-dev.herokuapp.com:443"
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout

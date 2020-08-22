@@ -3,7 +3,7 @@ const protobuf = require("protobufjs");
 const uuid = require("uuid");
 const util = require("util");
 
-const DEBUG = false
+const DEBUG = process.env.DEBUG == "true"
 const debug = function() {
   if (!DEBUG) return
   console.debug(arguments)
