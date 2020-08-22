@@ -1,0 +1,8 @@
+{
+  "name": "Desert Chat",
+  "description": "Desert Chat",
+  "image": "heroku/nodejs",
+  "env": {
+    "PORT": "443"
+  }
+}

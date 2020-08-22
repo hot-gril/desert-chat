@@ -148,7 +148,7 @@ const f = async function() {
 	function heartbeat() {
 		this.isAlive = true;
 	}
-	const wss = new WebSocket.Server({ port: 1453 });
+	const wss = new WebSocket.Server({ port: process.env.PORT || 1453 });
   debug("started server")
   wss.on('connection', function connection(ws) {
     debug("New connection")
