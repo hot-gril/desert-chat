@@ -1,0 +1,9 @@
+{
+  "scripts": {
+    "postinstall": "cd nodejs-server && npm install"
+  },
+  "dependencies": {
+  },
+  "devDependencies": {
+  }
+}
