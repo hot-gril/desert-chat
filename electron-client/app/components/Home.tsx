@@ -46,7 +46,11 @@ class JoinDialog extends React.Component {
     event.preventDefault()
     const invitationCode = (this.state.invitationCode || "").replaceAll(' ','')
     var id
-    if (this.state.username) {
+    var username = this.state.username
+    if (!this.state.selectedIdentity && !username) {
+      username = "anon"
+    }
+    if (username) {
       const ids = this.state.ids
       id = desert.makeIdentity()
       id.displayName = this.state.username
