@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import routes from '../constants/routes.json';
 const queryString = require('query-string');
+import Split from 'react-split'
 const common = require("./common")
 const desert = require("../model/desert")
 const electron = require("electron")
@@ -10,56 +11,108 @@ import FlatList from 'flatlist-react';
 
 const kSelf = "self"
 
-class TextRoom extends React.Component {
+class ParticipantList extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      client: undefined,
-      messages: [],
-      composingText: "",
+      list: [],
     };
-    this.handleError = this.handleError.bind(this)
-    this.checkClient = this.checkClient.bind(this)
-    this.renderMessage = this.renderMessage.bind(this)
+    this.state.listLength = this.state.list.length
     this.renderSeparator = this.renderSeparator.bind(this)
-    this.handleChange = this.handleChange.bind(this)
-    this.handleSubmit = this.handleSubmit.bind(this)
-  }
-
-  handleError(e) {
-    console.error({e})
-    alert(e)
+    this.renderItem = this.renderItem.bind(this)
+    this.checkParticipants = this.checkParticipants.bind(this)
+    this.checkParticipantsLoop = this.checkParticipantsLoop.bind(this)
+    this.onUserJoined = this.onUserJoined.bind(this)
   }
 
   componentDidMount() {
-    this.textInput.focus()
+    //this.checkParticipantsLoop()
   }
 
-  async checkClient() {
-    if (!this.props.options) return
-    try {
-      if (this.state.client === undefined) {
-        console.log("options", this.props.options)
-        const client = await desert.makeParticipantClient(this.props.options)
-        await client.joinRoom(this.props.options.invitationCode)
-        client.onReceiveText = function(senderHello, text) {
-          console.log(`Message from ${common.userName(senderHello)}: ${text.body}`)
-          const messages = this.state.messages
-          messages.push({senderHello, text})
-          this.setState({messages})
-        }.bind(this)
-        this.setState({client})
-      }
-    } catch(err) {
-      this.handleError(err)
-      this.setState({client: null})
-    }
+  onUserJoined(hello) {
+    setTimeout(this.checkParticipants, 500)
+  }
+
+  renderItem(userHello, idx) {
+    const isSelf = userHello.uuid == this.props.client.identity.uuid
+    return (
+      <li key={idx} style={{color : isSelf ? common.color.specialText : undefined, fontWeight: isSelf ? "bold" : undefined}}>
+        {common.userName(userHello)}
+      </li>
+    )
   }
 
   renderSeparator(group, idx, groupLabel) {
     return (
       <br/>
     )
+  }
+
+  checkParticipantsLoop() {
+    this.checkParticipants()
+    setTimeout(this.checkParticipantsLoop, 500)
+  }
+
+  checkParticipants() {
+    if (!this.props.client) return
+    const list = Object.values(this.props.client.hellos)
+    if (list.length != this.state.listLength) {
+      list.sort(function(e0, e1) {
+        if (e0.uuid == this.props.client.identity.uuid) return -1
+        else if (e1.uuid == this.props.client.identity.uuid) return 1
+        return common.userName(e0) < common.userName(e1) ? -1 : 1
+      }.bind(this))
+      console.log({list: list.map(e => common.userName(e))})
+      this.setState({
+        list,
+        listLength: list.length,
+      })
+    }
+  }
+
+  render() {
+    return (
+      <div style={{color: common.c.text}}>
+        <div ref={el => this.scrollView = el} style={{overflowY: "scroll", height: "calc(100vh - 105px)", padding: 10}}>
+          <ul style={{listStyle: "none", margin: 0, padding: 0}}>
+            <FlatList
+              list={this.state.list}
+              renderItem={this.renderItem}
+              groupOf={1}
+              groupSeparator={this.renderSeparator}
+              renderWhenEmpty={() => <div>No participants</div>}/> 
+          </ul>
+        </div>
+      </div>
+    );
+  }
+}
+
+class Messenger extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      messages: [],
+      composingText: "",
+    };
+    this.renderMessage = this.renderMessage.bind(this)
+    this.renderSeparator = this.renderSeparator.bind(this)
+    this.handleChange = this.handleChange.bind(this)
+    this.handleSubmit = this.handleSubmit.bind(this)
+    this.onUserJoined = this.onUserJoined.bind(this)
+  }
+
+  componentDidMount() {
+    this.textInput.focus()
+  }
+
+  renderSeparator(group, idx, groupLabel) {
+    return (
+      <br/>
+    )
+  }
+
+  onUserJoined(hello) {
   }
 
   renderMessage(msg, idx) {
@@ -99,9 +152,9 @@ class TextRoom extends React.Component {
       return
     }
     try {
-      await this.state.client.sendText(body)
+      await this.props.client.sendText(body)
     } catch(err) {
-      this.handleError(err)
+      common.handleError(err)
     }
     const messages = this.state.messages
     messages.push({senderHello: kSelf, text: {body}})
@@ -114,9 +167,8 @@ class TextRoom extends React.Component {
   }
 
   render() {
-    this.checkClient()
     return (
-      <div style={{color: common.c.text}}>
+      <div style={{color: common.c.text, flex: 6}}>
         <div ref={el => this.scrollView = el} style={{overflowY: "scroll", height: "calc(100vh - 105px)", padding: 10}}>
           <ul style={{listStyle: "none", margin: 0, padding: 0}}>
             <FlatList
@@ -152,17 +204,44 @@ class RoomDialog extends React.Component {
     super(props);
     const params = queryString.parse(location.hash.split("?")[1])
     this.options = JSON.parse(params.options)
+    this.state = {
+      client: undefined,
+    }
+    this.checkClient = this.checkClient.bind(this)
   }
 
-  handleError(e) {
-    alert(e)
+  async checkClient() {
+    if (!this.options) return
+    try {
+      if (this.state.client === undefined) {
+        const client = await desert.makeParticipantClient(this.options)
+        await client.joinRoom(this.options.invitationCode)
+        client.onReceiveText = function(senderHello, text) {
+          this.messenger.onReceiveText(senderHello, text)
+        }.bind(this)
+        client.onUserJoined = function(hello) {
+          this.messenger.onUserJoined(hello)
+          this.participantList.onUserJoined(hello)
+        }.bind(this)
+        this.setState({client})
+      }
+    } catch(err) {
+      common.handleError(err)
+      this.setState({client: null})
+    }
   }
 
   render() {
+    this.checkClient()
     return (
-      <div>
-      <TextRoom options={this.options} />
-      </div>
+      <div style={{display: "flex", flexDirection: "row"}}>
+        <div style={{width: 150}}>
+          <ParticipantList ref={el => this.participantList = el} client={this.state.client}/>
+        </div>
+        <div style={{flex: 5}}>
+          <Messenger ref={el => this.messenger = el} client={this.state.client}/>
+        </div>
+    </div>
     );
   }
 }

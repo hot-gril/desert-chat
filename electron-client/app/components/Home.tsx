@@ -44,7 +44,10 @@ class JoinDialog extends React.Component {
 
   handleSubmit(event) {
     event.preventDefault()
-    const invitationCode = (this.state.invitationCode || "").replaceAll(' ','')
+    var invitationCode = (this.state.invitationCode || "").replaceAll(' ','')
+    if (!invitationCode.endsWith("=")) {
+      invitationCode = invitationCode + "="
+    }
     var id
     var username = this.state.username
     if (!this.state.selectedIdentity && !username) {
@@ -72,7 +75,7 @@ class JoinDialog extends React.Component {
   async joinRoom(invitationCode, identity) {
     try {
       var win = new BrowserWindow({
-        width: 400, height: 400,
+        width: 1000, height: 1000,
         webPreferences: { nodeIntegration: true}
       } )
       win.on('close', function () { win = null })

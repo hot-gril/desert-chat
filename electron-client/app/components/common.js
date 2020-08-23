@@ -1,7 +1,8 @@
-const colors = {
+const color = {
   offBlack: "#333333",
   black: "black",
   text: "white",
+  specialText: "#ade2ff",
 }
 
 userName = function(hello, identity) {
@@ -11,7 +12,14 @@ userName = function(hello, identity) {
     || ("anon " + (hello.uuid || identity.uuid).substr(0, 7))
 }
 
+handleError = function(e) {
+    console.error({e})
+    alert(e)
+}
+
 module.exports = {
-  c: colors,
+  c: color,
+  color,
   userName,
+  handleError,
 }

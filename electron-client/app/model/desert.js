@@ -245,6 +245,7 @@ class RoomMasterClient extends Client {
         }.bind(this)))
       ])
       this.hellos[hello.uuid] = sd
+      if (this.onUserJoined) this.onUserJoined(hello.datagram.hello)
     }
   }
 }
@@ -363,6 +364,7 @@ class RoomParticipantClient extends Client {
         }
         if (this.hellos[hello.uuid] === undefined) {
           this.hellos[hello.uuid] = hello
+          if (this.onUserJoined) this.onUserJoined(hello)
         }
       }
       this.roomProfile = datagram.masterHello.roomProfile
