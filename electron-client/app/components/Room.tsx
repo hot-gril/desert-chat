@@ -24,6 +24,7 @@ class ParticipantList extends React.Component {
     this.checkParticipants = this.checkParticipants.bind(this)
     this.checkParticipantsLoop = this.checkParticipantsLoop.bind(this)
     this.onUserJoined = this.onUserJoined.bind(this)
+    this.onSelfJoined = this.onSelfJoined.bind(this)
   }
 
   componentDidMount() {
@@ -31,6 +32,10 @@ class ParticipantList extends React.Component {
   }
 
   onUserJoined(hello) {
+    setTimeout(this.checkParticipants, 500)
+  }
+
+  onSelfJoined(hello) {
     setTimeout(this.checkParticipants, 500)
   }
 
@@ -123,7 +128,7 @@ class Messenger extends React.Component {
       //body = "Copied invitation code to clipboard"
       body = `Copied invitation code to clipboard: ${this.props.invitationCode}`
     } else {
-      body = ""
+      body = "Joined room"
     }
     messages.push({senderHello: kClient, text: {body}})
     this.setState({messages})
@@ -150,7 +155,7 @@ class Messenger extends React.Component {
                 fontFamily: "monospace",
                   wordWrap: "break-word",
               display: "block",
-              width: "50%",
+              width: "calc(100vw - 130px)",
               textAlign: isSelf ? "right" : "left",
                   whiteSpace: "normal",
           }}>
@@ -194,7 +199,7 @@ class Messenger extends React.Component {
   render() {
     return (
       <div style={{color: common.c.text, flex: 6}}>
-        <div ref={el => this.scrollView = el} style={{overflowY: "scroll", height: "calc(100vh - 105px)", padding: 10}}>
+        <div ref={el => this.scrollView = el} style={{overflowY: "scroll", height: "calc(100vh - 85px)", width: "calc(100% - 20px)", padding: 10}}>
           <ul style={{listStyle: "none", margin: 0, padding: 0}}>
             <FlatList
               list={this.state.messages}
@@ -206,7 +211,7 @@ class Messenger extends React.Component {
         </div>
         <br/>
         <div style={{width: "96%", background: common.c.black,
-            position: "fixed", left: 0, bottom: 0, height: 50, padding: "2%"}}>
+            position: "fixed", left: 0, bottom: 0, height: 50, paddingTop: 20, paddingLeft: "2%", paddingRight: "2%"}}>
           <form onSubmit={this.handleSubmit}>
             <div style={{display: "flex", flexDirection: "column", justifyContent: "flex-end"}}>
               <input
@@ -262,6 +267,7 @@ class RoomDialog extends React.Component {
         }.bind(this)
         client.onSelfJoined = function() {
           this.messenger.onSelfJoined()
+          this.participantList.onSelfJoined()
         }.bind(this)
         await client.joinRoom(this.options.invitationCode)
         this.setState({participantClient: client})
@@ -286,7 +292,7 @@ class RoomDialog extends React.Component {
         <div style={{width: 150}}>
           <ParticipantList ref={el => this.participantList = el} client={this.state.participantClient}/>
         </div>
-        <div style={{flex: 5}}>
+        <div style={{}}>
           <Messenger ref={el => this.messenger = el} client={this.state.participantClient} invitationCode={this.options.invitationCode} mode={this.options.mode}/>
         </div>
     </div>
