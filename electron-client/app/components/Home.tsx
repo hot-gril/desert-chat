@@ -88,7 +88,7 @@ class JoinDialog extends React.Component {
   async joinRoom(invitationCode, identity) {
     try {
       var win = new BrowserWindow({
-        width: 1000, height: 1000,
+        width: 2000, height: 1000,
         webPreferences: { nodeIntegration: true}
       } )
       win.on('close', function () { win = null })

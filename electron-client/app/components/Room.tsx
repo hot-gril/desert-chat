@@ -108,6 +108,7 @@ class Messenger extends React.Component {
     this.handleSubmit = this.handleSubmit.bind(this)
     this.onUserJoined = this.onUserJoined.bind(this)
     this.onSelfJoined = this.onSelfJoined.bind(this)
+    this.onReceiveText = this.onReceiveText.bind(this)
   }
 
   componentDidMount() {
@@ -118,6 +119,13 @@ class Messenger extends React.Component {
     return (
       <br/>
     )
+  }
+
+  onReceiveText(senderHello, text) {
+    console.log(`Message from ${common.userName(senderHello)}: ${text.body}`)
+    const messages = this.state.messages
+    messages.push({senderHello, text})
+    this.setState({messages})
   }
 
   onSelfJoined() {
@@ -248,7 +256,6 @@ class RoomDialog extends React.Component {
     if (this.checkingClient) return
     this.checkingClient = true
     if (!this.options) return
-    console.log("options", this.options)
     try {
       if (!this.options.invitationCode) {
         // making a new room
@@ -293,7 +300,7 @@ class RoomDialog extends React.Component {
           <ParticipantList ref={el => this.participantList = el} client={this.state.participantClient}/>
         </div>
         <div style={{}}>
-          <Messenger ref={el => this.messenger = el} client={this.state.participantClient} invitationCode={this.options.invitationCode} mode={this.options.mode}/>
+          <Messenger ref={el => this.messenger = el} client={this.state.participantClient} invitationCode={this.options.invitationCode} mode={this.options.mode} options={this.options}/>
         </div>
     </div>
     );
