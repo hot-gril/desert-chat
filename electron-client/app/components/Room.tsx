@@ -10,6 +10,7 @@ const BrowserWindow = electron.remote.BrowserWindow
 import FlatList from 'flatlist-react';
 
 const kSelf = "self"
+const kClient = "client"
 
 class ParticipantList extends React.Component {
   constructor(props) {
@@ -91,8 +92,9 @@ class ParticipantList extends React.Component {
 class Messenger extends React.Component {
   constructor(props) {
     super(props);
+    const body = this.props.mode == "create" ? `Creating room...` : "Joining room..."
     this.state = {
-      messages: [],
+      messages: [{senderHello: kClient, text: {body}}],
       composingText: "",
     };
     this.renderMessage = this.renderMessage.bind(this)
@@ -100,6 +102,7 @@ class Messenger extends React.Component {
     this.handleChange = this.handleChange.bind(this)
     this.handleSubmit = this.handleSubmit.bind(this)
     this.onUserJoined = this.onUserJoined.bind(this)
+    this.onSelfJoined = this.onSelfJoined.bind(this)
   }
 
   componentDidMount() {
@@ -112,12 +115,34 @@ class Messenger extends React.Component {
     )
   }
 
+  onSelfJoined() {
+    const messages = this.state.messages
+    var body
+    electron.clipboard.writeText(this.props.invitationCode)
+    if (this.props.mode == "create") {
+      //body = "Copied invitation code to clipboard"
+      body = `Copied invitation code to clipboard: ${this.props.invitationCode}`
+    } else {
+      body = ""
+    }
+    messages.push({senderHello: kClient, text: {body}})
+    this.setState({messages})
+  }
+
   onUserJoined(hello) {
   }
 
   renderMessage(msg, idx) {
     var justify
-    const isSelf = (msg.senderHello === kSelf || msg.senderHello.uuid == (this.props.options.identity || {}).uuid)
+    const isClient = (msg.senderHello === kClient)
+    const isSelf = !isClient && (msg.senderHello === kSelf || msg.senderHello.uuid == (this.props.options.identity || {}).uuid)
+    var messageStyle
+    if (isClient) {
+      messageStyle = {
+        color: common.color.specialText,
+        fontStyle: "italic",
+      }
+    }
     return (
       <li key={idx}>
         <div style={{display: "flex", justifyContent: isSelf ? "flex-end" : "flex-start"}}>
@@ -129,14 +154,14 @@ class Messenger extends React.Component {
               textAlign: isSelf ? "right" : "left",
                   whiteSpace: "normal",
           }}>
-            {(!isSelf) && (
+            {(!isSelf && !isClient) && (
               <span style={{
                   fontWeight: isSelf ? "bold" : undefined,
               }}>
                 {common.userName(msg.senderHello) + ": "}
               </span>
             )}
-            <span>
+            <span style={messageStyle}>
               {msg.text.body}
             </span>
           </span>
@@ -204,18 +229,30 @@ class RoomDialog extends React.Component {
     super(props);
     const params = queryString.parse(location.hash.split("?")[1])
     this.options = JSON.parse(params.options)
+    this.options.mode = this.options.invitationCode ? "join" : "create"
     this.state = {
-      client: undefined,
+      participantClient: undefined,
+      masterClient: undefined,
+      errored: false,
     }
     this.checkClient = this.checkClient.bind(this)
+    this.checkingClient = false
   }
 
   async checkClient() {
+    if (this.checkingClient) return
+    this.checkingClient = true
     if (!this.options) return
+    console.log("options", this.options)
     try {
-      if (this.state.client === undefined) {
+      if (!this.options.invitationCode) {
+        // making a new room
+        const client = await desert.makeMasterClient(this.options.hostname)
+        this.options.invitationCode = await client.createRoom()
+        this.setState({masterClient: client})
+      }
+      if (this.state.participantClient === undefined) {
         const client = await desert.makeParticipantClient(this.options)
-        await client.joinRoom(this.options.invitationCode)
         client.onReceiveText = function(senderHello, text) {
           this.messenger.onReceiveText(senderHello, text)
         }.bind(this)
@@ -223,12 +260,23 @@ class RoomDialog extends React.Component {
           this.messenger.onUserJoined(hello)
           this.participantList.onUserJoined(hello)
         }.bind(this)
-        this.setState({client})
+        client.onSelfJoined = function() {
+          this.messenger.onSelfJoined()
+        }.bind(this)
+        await client.joinRoom(this.options.invitationCode)
+        this.setState({participantClient: client})
       }
+      this.setState({errored: false})
     } catch(err) {
-      common.handleError(err)
-      this.setState({client: null})
+      console.error(err)
+      this.setState({errored: true, masterClient: undefined, participantClient: undefined})
+      if (this.state.errored) {
+        await new Promise(r => setTimeout(r, 2000))
+      } else {
+        common.handleError(err)
+      }
     }
+    this.checkingClient = false
   }
 
   render() {
@@ -236,10 +284,10 @@ class RoomDialog extends React.Component {
     return (
       <div style={{display: "flex", flexDirection: "row"}}>
         <div style={{width: 150}}>
-          <ParticipantList ref={el => this.participantList = el} client={this.state.client}/>
+          <ParticipantList ref={el => this.participantList = el} client={this.state.participantClient}/>
         </div>
         <div style={{flex: 5}}>
-          <Messenger ref={el => this.messenger = el} client={this.state.client}/>
+          <Messenger ref={el => this.messenger = el} client={this.state.participantClient} invitationCode={this.options.invitationCode} mode={this.options.mode}/>
         </div>
     </div>
     );

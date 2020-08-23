@@ -27,7 +27,8 @@ function newSocket(hostname) {
 // abstract
 class Client {
   constructor(proto, ws, hostname, options) {
-    this.options = options || {}
+    options = options || {}
+    this.options = options
     this.proto = proto
     this.ws = ws
     this.hostname = hostname
@@ -75,6 +76,7 @@ class Client {
     if (this.isInitialized()) return  // checks again in case of concurrent initialization
     this.dmChannelId = dmChannelId
     console.info("Finished initializing client " + this.identity.uuid)
+    if (this.onSelfJoined) this.onSelfJoined()
   }
 
   // for debugging
@@ -196,7 +198,7 @@ class RoomMasterClient extends Client {
       // TODO add room profile
     })
     const invitationBytes = this.proto.client.RoomInvitation.encode(invitation).finish()
-    return invitationBytes
+    return naclUtil.encodeBase64(invitationBytes)
   }
 
   name() {
@@ -472,7 +474,9 @@ async function makeParticipantClient(options) {
 }
 async function makeMasterClient(hostname) {
   if (!proto) proto = await setup()
-  return new RoomMasterClient(proto, await newSocket(hostname), hostname)
+  const client = new RoomMasterClient(proto, await newSocket(hostname), hostname)
+  await client.init()
+  return client
 }
 function makeIdentity() {
   return {

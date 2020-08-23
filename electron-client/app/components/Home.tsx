@@ -17,12 +17,15 @@ class JoinDialog extends React.Component {
     this.state = {
       invitationCode: "",
       username: "",
+      hostname: "desert-chat-dev.herokuapp.com:80",
       ids: {},
       dropdownIds: [],
       selectedIdentity: null,
+      mode: "",
     }
 
     this.handleChangeCode = this.handleChangeCode.bind(this)
+    this.handleChangeHostname = this.handleChangeHostname.bind(this)
     this.handleChangeUsername = this.handleChangeUsername.bind(this)
     this.handleSubmit = this.handleSubmit.bind(this)
     this.joinRoom = this.joinRoom.bind(this)
@@ -38,15 +41,25 @@ class JoinDialog extends React.Component {
     this.setState({invitationCode: event.target.value})
   }
 
+  handleChangeHostname(event) {
+    this.setState({hostname: event.target.value})
+  }
+
   handleChangeUsername(event) {
     this.setState({username: event.target.value})
   }
 
   handleSubmit(event) {
     event.preventDefault()
-    var invitationCode = (this.state.invitationCode || "").replaceAll(' ','')
-    if (!invitationCode.endsWith("=")) {
-      invitationCode = invitationCode + "="
+    var invitationCode = null
+    if (this.state.mode == "join") {
+      invitationCode = (this.state.invitationCode || "").replaceAll(' ','')
+      if (!invitationCode.endsWith("=")) {
+        invitationCode = invitationCode + "="
+      }
+    } else if (this.state.mode != "create") {
+      // shouldn't happen
+      return
     }
     var id
     var username = this.state.username
@@ -82,6 +95,7 @@ class JoinDialog extends React.Component {
       //win.loadURL(`file://${__dirname}/app.html#${routes.ROOM}?invitationCode=${encodeURIComponent(code)}`)
       const options = {
         invitationCode,
+        hostname: this.state.hostname,
         identity: {
           ...identity,
           datagramSignPair: {
@@ -100,22 +114,56 @@ class JoinDialog extends React.Component {
   }
 
   render() {
+    var createFontColor
+    var joinFontColor
+    if (this.state.mode == "create") {
+      createFontColor = "green"
+      joinFontColor = "grey"
+    } else if (this.state.mode == "join") {
+      createFontColor = "grey"
+      joinFontColor = "green"
+    }
     return (
       <div>
         <div style={{color: common.c.text, padding: 10, fontFamily: "sans-serif", fontSize: 24}}>
-          <form onSubmit={this.handleSubmit}>
-              <label>
-                1. Paste the invitation code:
-                <div style={{display: "flex"}}>
-                  <textarea style={{resize: "none", width: "100%", color: "blue"}}
-                    placeholder="CiQ3YjVjNDFhNS05MDg5LTRiMDEtYTNmNC0wNjkxZGI3NzYwOWESFHN2bC56YWRpa2lhbi51czoxNDUzGiDd53BGHZgTcI9XHy0kg/5rD4M4iikhrAR6uQdoRq4UGiIgYPrRwuXSVAmleFwSNfLT3SvjfptsV0Tc58ByQsrHJCcqEP0YFYE0mexwJmiQuGyEGyw="
-                    value={this.state.invitationCode}
-                    onChange={this.handleChangeCode}/>
-                </div>
-              </label>
+          <div style={{display: "flex", flexDirection: "row", justifyContent: "flex-start", alignItems: "center"}}>
+          <form style={{width: 150}} onSubmit={() => this.setState({mode: "create"})}>
+            <input style={{color: createFontColor, fontWeight: "bold", fontSize: 22, width: 150, height: 50, border: "none"}} type="submit" value="Create Room" />
+          </form>
+          <div style={{width: 10}}/>
+          <div style={{}}>{"or"}</div>
+          <div style={{width: 10}}/>
+          <form style={{width: 150}} onSubmit={() => this.setState({mode: "join"})}>
+            <input style={{color: joinFontColor, fontWeight: "bold", fontSize: 22, width: 150, height: 50, border: "none"}} type="submit" value="Join Room" />
+          </form>
+        </div>
+          <br/>
+          {this.state.mode && (<form onSubmit={this.handleSubmit}>
+              {this.state.mode == "join" && ( 
+                <label>
+                  1. Paste the invitation code:
+                  <div style={{display: "flex"}}>
+                    <textarea style={{resize: "none", width: "100%", color: "blue"}}
+                      placeholder="CiQ3YjVjNDFhNS05MDg5LTRiMDEtYTNmNC0wNjkxZGI3NzYwOWESFHN2bC56YWRpa2lhbi51czoxNDUzGiDd53BGHZgTcI9XHy0kg/5rD4M4iikhrAR6uQdoRq4UGiIgYPrRwuXSVAmleFwSNfLT3SvjfptsV0Tc58ByQsrHJCcqEP0YFYE0mexwJmiQuGyEGyw="
+                      value={this.state.invitationCode}
+                      onChange={this.handleChangeCode}/>
+                  </div>
+                </label>
+              )}
+              {this.state.mode == "create" && ( 
+                <label>
+                  1. Enter the server's address:
+                  <div style={{display: "flex"}}>
+                    <textarea style={{fontSize: 20, resize: "none", width: "100%", height: 30, color: "blue"}}
+                      placeholder="desert-chat-dev.herokuapp.com:80"
+                      value={this.state.hostname}
+                      onChange={this.handleChangeHostname}/>
+                  </div>
+                </label>
+              )}
               <br/>
               <label>
-                2. Choose an identity:
+                {"2. Choose an identity:"}
                 <Dropdown options={[{value: kNewId, label: "Create new..."}].concat(this.state.dropdownIds)}
                   onChange={this.onSelectIdentity}
                   value={this.state.selectedIdentity}
@@ -133,8 +181,8 @@ class JoinDialog extends React.Component {
               </label>
             )}
             <br/>
-            <input style={{fontColor: this.state.invitationCode ? "green" : "grey", fontWeight: "bold", fontSize: 24, width: 150, height: 50, border: "none"}} type="submit" value="Join Room" disabled={!this.state.invitationCode} />
-          </form>
+            <input style={{fontColor: this.state.invitationCode ? "green" : "grey", fontWeight: "bold", fontSize: 24, width: 100, height: 50, border: "none"}} type="submit" value={"Go"} disabled={this.state.mode == "join" && !this.state.invitationCode} />
+          </form>)}
         </div>
       </div>
     );
