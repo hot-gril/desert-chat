@@ -1,5 +1,4 @@
 const protobuf = require("protobufjs");
-const uuid = require("uuid");
 const nacl = require('tweetnacl');
 const naclUtil = require('tweetnacl-util');
 
@@ -22,6 +21,13 @@ function newSocket(hostname) {
       resolve(ws)
     }
   })
+}
+
+// Returns a key that unique identifies a hello or local identity
+const helloId = function(hello) {
+  var key = hello.datagramSigningKey
+  if (!key) key = hello.datagramSignPair.publicKey
+  return naclUtil.encodeBase64(key)
 }
 
 // abstract
@@ -53,7 +59,7 @@ class Client {
   }
 
   async init() {
-    console.info("Initializing client " + this.identity.uuid)
+    console.info("Initializing client " + helloId(this.identity))
     this.ws.onmessage = async function(event) {
       const data = event.data
       const bytes = new Uint8Array(await data.arrayBuffer())
@@ -75,8 +81,7 @@ class Client {
     const dmChannelId = await this.createChannel()
     if (this.isInitialized()) return  // checks again in case of concurrent initialization
     this.dmChannelId = dmChannelId
-    console.info("Finished initializing client " + this.identity.uuid)
-    if (this.onSelfJoined) this.onSelfJoined()
+    console.info("Finished initializing client " + helloId(this.identity))
   }
 
   // for debugging
@@ -125,7 +130,7 @@ class Client {
   }
 
   // `datagram` is a proto.client.Datagram,
-  //   will be mutated to contain nonce, seq number, and participant uuid
+  //   will be mutated to contain nonce and seq number
   //   then wrapped in a SignedDatagram
   async sendC2C({
     // Exactly one of the following must be defined.
@@ -163,7 +168,7 @@ class Client {
         Buffer.from(encryptionKey), Buffer.from(this.signPair.secretKey))
     }
     const c2sDatagram = this.proto.server.Datagram.create({
-      dstHostname: hostname, nonce, payload: boxed, srcUuid: this.identity.uuid,
+      dstHostname: hostname, nonce, payload: boxed, srcUuid: helloId(this.identity),
       dstChannelId: channelId
     })
     if (includeIdentity) c2sDatagram.srcPublicSigningKey = this.signPair.publicKey
@@ -198,11 +203,12 @@ class RoomMasterClient extends Client {
       // TODO add room profile
     })
     const invitationBytes = this.proto.client.RoomInvitation.encode(invitation).finish()
+    if (this.onSelfJoined) this.onSelfJoined()
     return naclUtil.encodeBase64(invitationBytes)
   }
 
   name() {
-    return `[RoomMasterClient ${this.identity.uuid}]`
+    return `[RoomMasterClient ${helloId(this.identity)}]`
   }
 
   async handleC2C(message) {
@@ -246,7 +252,7 @@ class RoomMasterClient extends Client {
             datagram: oldMasterHello})
         }.bind(this)))
       ])
-      this.hellos[hello.uuid] = sd
+      this.hellos[helloId(hello)] = sd
       if (this.onUserJoined) this.onUserJoined(hello.datagram.hello)
     }
   }
@@ -267,7 +273,6 @@ class RoomParticipantClient extends Client {
       displayName: (this.options.identity || {}).displayName,
     })
     this.hello = this.proto.client.Hello.create({
-      uuid: this.identity.uuid,
       hostname: this.hostname,
       datagramSigningKey: this.identity.datagramSignPair.publicKey,
       dmSigningKey: this.signPair.publicKey,
@@ -275,7 +280,7 @@ class RoomParticipantClient extends Client {
       dmChannelId: this.dmChannelId,
       userProfile: userProfile,
     })
-    this.hellos[this.identity.uuid] = this.hello
+    this.hellos[helloId(this.hello)] = this.hello
   }
 
   isInRoom() {
@@ -289,7 +294,7 @@ class RoomParticipantClient extends Client {
   }
 
   name() {
-    return `[RoomParticipantClient ${this.identity.uuid}]`
+    return `[RoomParticipantClient ${helloId(this.identity)}]`
   }
 
   onReceiveText(senderHello, text) {
@@ -364,15 +369,17 @@ class RoomParticipantClient extends Client {
           console.warn(`${this.name()} ignoring signed hello datagram with invalid signature: ${sd}`)
           continue
         }
-        if (this.hellos[hello.uuid] === undefined) {
-          this.hellos[hello.uuid] = hello
+        if (this.hellos[helloId(hello)] === undefined) {
+          this.hellos[helloId(hello)] = hello
           if (this.onUserJoined) this.onUserJoined(hello)
         }
       }
       this.roomProfile = datagram.masterHello.roomProfile
       this.roomKeys.push(Buffer.from(datagram.masterHello.roomKey))
+      const wasInRoom = this.isInRoom()
       this.roomChannelId = datagram.masterHello.roomChannelId
       await this.subscribeToChannel(this.roomChannelId)
+      if (!wasInRoom && this.onSelfJoined) this.onSelfJoined()
     }
     else if (datagram.text) {
       const senderHello = this.hellos[srcUuid]
@@ -480,7 +487,6 @@ async function makeMasterClient(hostname) {
 }
 function makeIdentity() {
   return {
-    uuid: uuid.v4(),
     displayName: "",
     datagramSignPair: nacl.sign.keyPair(),
   }
@@ -490,4 +496,5 @@ module.exports = {
   makeParticipantClient,
   makeMasterClient,
   makeIdentity,
+  helloId,
 }

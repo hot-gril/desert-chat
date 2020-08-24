@@ -13,7 +13,7 @@ message RoomProfile {
 }
 
 message Hello {
-  string uuid = 1;
+  reserved 1;
   string hostname = 2;
 
   // Public, secures the libnacl boxes in the DM channel to this user.

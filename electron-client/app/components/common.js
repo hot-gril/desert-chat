@@ -9,7 +9,7 @@ userName = function(hello, identity) {
   hello = hello || {}
   identity = identity || {}
   return (hello.userProfile || {}).displayName || identity.displayName
-    || ("anon " + (hello.uuid || identity.uuid).substr(0, 7))
+    || ("anon " + Buffer.from(hello.datagramSigningKey || identity.datagramSignPair.publicKey).toString("hex").substr(0, 7))
 }
 
 handleError = function(e) {

@@ -40,7 +40,7 @@ class ParticipantList extends React.Component {
   }
 
   renderItem(userHello, idx) {
-    const isSelf = userHello.uuid == this.props.client.identity.uuid
+    const isSelf = desert.helloId(userHello) == desert.helloId(this.props.client.identity)
     return (
       <li key={idx} style={{color : isSelf ? common.color.specialText : undefined, fontWeight: isSelf ? "bold" : undefined}}>
         {common.userName(userHello)}
@@ -64,8 +64,8 @@ class ParticipantList extends React.Component {
     const list = Object.values(this.props.client.hellos)
     if (list.length != this.state.listLength) {
       list.sort(function(e0, e1) {
-        if (e0.uuid == this.props.client.identity.uuid) return -1
-        else if (e1.uuid == this.props.client.identity.uuid) return 1
+        if (desert.helloId(e0) == desert.helloId(this.props.client.identity)) return -1
+        else if (desert.helloId(e1) == desert.helloId(this.props.client.identity)) return 1
         return common.userName(e0) < common.userName(e1) ? -1 : 1
       }.bind(this))
       console.log({list: list.map(e => common.userName(e))})
@@ -148,7 +148,7 @@ class Messenger extends React.Component {
   renderMessage(msg, idx) {
     var justify
     const isClient = (msg.senderHello === kClient)
-    const isSelf = !isClient && (msg.senderHello === kSelf || msg.senderHello.uuid == (this.props.options.identity || {}).uuid)
+    const isSelf = !isClient && (msg.senderHello === kSelf || desert.helloId(msg.senderHello) == desert.helloId(this.props.options.identity))
     var messageStyle
     if (isClient) {
       messageStyle = {
