@@ -4,12 +4,14 @@ import routes from '../constants/routes.json';
 import styles from './Home.css';
 const common = require("./common")
 const desert = require("../model/desert")
+const global = require("../model/global")
 const electron = require("electron")
 const BrowserWindow = electron.remote.BrowserWindow
 import Dropdown from 'react-dropdown';
 import 'react-dropdown/style.css';
 
 const kNewId = "new"
+const kIds = "identities"
 
 class JoinDialog extends React.Component {
   constructor(props) {
@@ -31,6 +33,17 @@ class JoinDialog extends React.Component {
     this.joinRoom = this.joinRoom.bind(this)
     this.onSelectIdentity = this.onSelectIdentity.bind(this)
     this.handleError = this.handleError.bind(this)
+  }
+
+  componentDidMount() {
+    const ids = global.store.get(kIds) || {}
+    const dropdownIds = Object.values(ids).map(function(id) {
+      return {
+        value: desert.helloId(id),
+        label: common.userName(undefined, id),
+      }
+    })
+    this.setState({ids, dropdownIds})
   }
 
   handleError(e) {
@@ -70,9 +83,10 @@ class JoinDialog extends React.Component {
       const ids = this.state.ids
       id = desert.makeIdentity()
       id.displayName = this.state.username
-      ids[id.uuid] = id
+      ids[desert.helloId(id)] = id
       const dropdownIds = this.state.dropdownIds
-      dropdownIds.unshift({value: id.uuid, label: common.userName(undefined, id)})
+      dropdownIds.unshift({value: desert.helloId(id), label: common.userName(undefined, id)})
+      global.store.set(kIds, ids)
       this.setState({ids, dropdownIds})
       console.log({id})
     } else {

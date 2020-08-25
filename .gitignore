@@ -19,3 +19,4 @@ tags
 [._]*.un~
 
 .DS_Store
+node_modules

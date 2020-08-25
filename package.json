@@ -3,7 +3,7 @@
     "postinstall": "cd nodejs-server && npm install"
   },
   "dependencies": {
+    "electron-store": "^6.0.0"
   },
-  "devDependencies": {
-  }
+  "devDependencies": {}
 }
