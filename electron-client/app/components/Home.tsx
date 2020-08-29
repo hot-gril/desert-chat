@@ -29,7 +29,6 @@ class RoomButton extends React.Component {
 
   render() {
     const isNew = this.props.isNew
-    console.log({selected: this.props.selected})
     return (
       <div
         ref={el => this.button = el}
@@ -41,12 +40,12 @@ class RoomButton extends React.Component {
           height: 60,
             padding: 10,
             userSelect: "none",
-            opacity: this.props.selected ? 0.5 : undefined,
+            opacity: this.props.selected ? 0.5 : (this.state.hover ? 0.9 : 1),
             backgroundColor: isNew ? common.color.specialWine : common.color.wine,
             borderColor: common.color.white,
-            borderStyle: "outset",
-            borderWidth: 2,
-            borderRadius: 20,
+            borderStyle: "solid",
+            borderWidth: 1,
+            //            borderRadius: 20,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -393,6 +392,18 @@ class RoomList extends React.Component {
             {"Rooms"}
           </Title>
         </div>
+        <div style={{overflowY: "scroll"}}>
+          <br/>
+          <RoomButton
+            isNew={true}
+            selected={false}
+            onClick={() => {
+            }}
+          >
+            {"+"}
+          </RoomButton>
+          <br/>
+        </div>
         <div ref={el => this.scrollView = el}
           style={{
             overflowY: "scroll",
@@ -400,7 +411,7 @@ class RoomList extends React.Component {
           }}>
           <ul style={{listStyle: "none", margin: 0, padding: 0}}>
             <FlatList
-              list={[RoomList.kNew, ...this.props.clients]}
+              list={this.props.clients}
               renderItem={this.renderItem.bind(this)}
               groupOf={1}
               groupSeparator={this.renderSeparator}
@@ -536,6 +547,12 @@ const testHellos = [
 ]
 
 const testRooms = [
+  {...testSelfClient,
+    roomProfile: {displayName: "ct6-iwnl"},
+    hellos: [
+    {datagramSigningKey: "cat"},
+    {datagramSigningKey: testSelfKey},
+  ]},
   {...testSelfClient, hellos: [
     {datagramSigningKey: "cat"},
     {datagramSigningKey: testSelfKey},
@@ -555,6 +572,7 @@ const testRooms = [
     {datagramSigningKey: testSelfKey},
   ]},
 ]
+for (var i = 0; i < 100; i++) testRooms.push(testRooms[3])
 
 class ChatView extends React.Component {
   constructor(props) {
