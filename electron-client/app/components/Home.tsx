@@ -15,6 +15,51 @@ import 'react-dropdown/style.css';
 const kNewId = "new"
 const kIds = "identities"
 
+class RoomButton extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      hover: false,
+    }
+  }
+
+  onClick() {
+    this.props.onClick()
+  }
+
+  render() {
+    const isNew = this.props.isNew
+    console.log({selected: this.props.selected})
+    return (
+      <div
+        ref={el => this.button = el}
+        onMouseEnter={() => this.setState({hover: true})}
+        onMouseLeave={() => this.setState({hover: false})}
+        className={this.state.fade ? 'fade' : ''}
+        onClick={this.onClick.bind(this)}
+        style={{
+          height: 60,
+            padding: 10,
+            userSelect: "none",
+            opacity: this.props.selected ? 0.5 : undefined,
+            backgroundColor: isNew ? common.color.specialWine : common.color.wine,
+            borderColor: common.color.white,
+            borderStyle: "outset",
+            borderWidth: 2,
+            borderRadius: 20,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            textAlign: "center",
+            fontSize: isNew ? 50 : undefined,
+            fontWeight: isNew ? "bold" : undefined,
+        }}>
+          {this.props.children}
+        </div>
+    )
+  }
+}
+
 class Title extends React.Component {
   render() {
     return (
@@ -284,42 +329,52 @@ class RoomList extends React.Component {
   constructor(props) {
     super(props);
     this.scrollView = undefined
-    this.renderItem = this.renderItem.bind(this)
     this.renderSeparator = this.renderSeparator.bind(this)
+    this.state = {
+      selectedIdx: null,
+    }
   }
 
   renderItem(client, idx) {
-    var roomName = (client.roomProfile || {}).displayName
-    if (!roomName) {
-      const maxNames = 3
-      const others = Object.values(client.hellos)
-        .filter(h => desert.helloId(h) !=
-          desert.helloId(client.identity))
-      others.sort(function(a, b) {
-        const aName = common.userName(a)
-        const bName = common.userName(b)
-        if (aName == bName) return 0
-        return aName < bName ? -1 : 1
-      })
-      var nameList = others.slice(0, maxNames).map(common.userName).join(", ")
-      if (others.length > maxNames) {
-        roomName = nameList + ` + ${others.length - maxNames}`
-      } else {
-        roomName = nameList
+    const isNew = client == RoomList.kNew
+    var roomName
+    if (isNew) {
+      roomName = "+"
+    } else {
+      roomName = (client.roomProfile || {}).displayName
+      if (!roomName) {
+        const maxNames = 3
+        const others = Object.values(client.hellos)
+          .filter(h => desert.helloId(h) !=
+            desert.helloId(client.identity))
+        others.sort(function(a, b) {
+          const aName = common.userName(a)
+          const bName = common.userName(b)
+          if (aName == bName) return 0
+          return aName < bName ? -1 : 1
+        })
+        var nameList = others.slice(0, maxNames).map(common.userName).join(", ")
+        if (others.length > maxNames) {
+          roomName = nameList + ` + ${others.length - maxNames}`
+        } else {
+          roomName = nameList
+        }
       }
     }
 
+    const isSelected = idx == this.state.selectedIdx
     return (
-      <li key={idx} style={{
-        height: 60,
-        padding: 10,
-          backgroundColor: common.color.wine,
-          borderColor: common.color.white,
-          borderStyle: "outset",
-          borderWidth: 2,
-          borderRadius: 20,
-      }}>
-        {roomName}
+      <li key={idx}>
+        <RoomButton
+          isNew={isNew}
+          selected={!isNew && isSelected}
+          onClick={() => {
+            this.setState({selectedIdx: idx})
+            console.log(`clicked ${idx}`)
+          }}
+        >
+          {roomName}
+        </RoomButton>
       </li>
     )
   }
@@ -345,8 +400,8 @@ class RoomList extends React.Component {
           }}>
           <ul style={{listStyle: "none", margin: 0, padding: 0}}>
             <FlatList
-              list={this.props.clients}
-              renderItem={this.renderItem}
+              list={[RoomList.kNew, ...this.props.clients]}
+              renderItem={this.renderItem.bind(this)}
               groupOf={1}
               groupSeparator={this.renderSeparator}
               renderWhenEmpty={() => <div></div>}/> 
@@ -356,6 +411,7 @@ class RoomList extends React.Component {
     );
   }
 }
+RoomList.kNew = "new"
 
 class MessageList extends React.Component {
   constructor(props) {

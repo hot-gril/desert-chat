@@ -3,6 +3,7 @@ const color = {
   black: "black",
   white: "white",
   wine: "#370038",
+  specialWine: "#73304a",
   text: "white",
   specialText: "#ffbff3",
   selfText: "#ade2ff",
