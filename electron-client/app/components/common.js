@@ -1,8 +1,11 @@
 const color = {
   offBlack: "#333333",
   black: "black",
+  white: "white",
+  wine: "#370038",
   text: "white",
-  specialText: "#ade2ff",
+  specialText: "#ffbff3",
+  selfText: "#ade2ff",
 }
 
 userName = function(hello, identity) {
