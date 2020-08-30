@@ -299,7 +299,7 @@ class ParticipantList extends React.Component {
           }}>
           <ul style={{listStyle: "none", margin: 10, padding: 0}}>
             <FlatList
-              list={this.props.hellos.slice().sort(function(a, b) {
+              list={Object.values(this.props.client.hellos).sort(function(a, b) {
                 if (desert.helloId(a) ==
                   desert.helloId(this.props.client.identity)) {
                   return -1
@@ -368,8 +368,11 @@ class RoomList extends React.Component {
           isNew={isNew}
           selected={!isNew && isSelected}
           onClick={() => {
-            this.setState({selectedIdx: idx})
             console.log(`clicked ${idx}`)
+            this.setState({selectedIdx: idx})
+            if (this.props.onSelect) {
+              this.props.onSelect(parseInt((idx - 1) / 2))
+            }
           }}
         >
           {roomName}
@@ -509,7 +512,7 @@ class MessageList extends React.Component {
         }}>
         <ul style={{listStyle: "none", margin: 10, padding: 0}}>
           <FlatList
-            list={this.props.messages}
+            list={this.props.client.messages}
             renderItem={this.renderMessage}
             groupOf={1}
             groupSeparator={this.renderSeparator}
@@ -522,57 +525,38 @@ class MessageList extends React.Component {
 MessageList.kClientSender = "client"
 MessageList.kSelfSender = "self"
 
-const testSelfKey = "self"
-const testSelfClient = {identity: {datagramSigningKey: testSelfKey}}
-
-const testMessages= [
-  {senderHello: MessageList.kClientSender,
-    text: {body: "message from client"}},
-  {senderHello: {datagramSigningKey: "deadbeef"},
-    text: {body: "message from other"}},
-  {senderHello: MessageList.kClientSender,
-    text: {body: "message from client"}},
-  {senderHello: MessageList.kSelfSender,
-    text: {body: "message from self"}},
-  {senderHello: {datagramSigningKey: "a13de09"},
-    text: {body: "message from other"}},
-]
-for (var i = 0; i < 100; i++) testMessages.push(testMessages[4])
-
-const testHellos = [
-  {datagramSigningKey: "cat"},
-  {datagramSigningKey: "banana"},
-  {datagramSigningKey: "apple"},
-  {datagramSigningKey: testSelfKey},
-]
-
-const testRooms = [
-  {...testSelfClient,
-    roomProfile: {displayName: "ct6-iwnl"},
-    hellos: [
-    {datagramSigningKey: "cat"},
-    {datagramSigningKey: testSelfKey},
-  ]},
-  {...testSelfClient, hellos: [
-    {datagramSigningKey: "cat"},
-    {datagramSigningKey: testSelfKey},
-  ]},
-  {...testSelfClient, hellos: [
-    {datagramSigningKey: "cat"},
-    {datagramSigningKey: "banana"},
-    {datagramSigningKey: "apple"},
-    {datagramSigningKey: testSelfKey},
-  ]},
-  {...testSelfClient, hellos: [
-    {datagramSigningKey: "cat"},
-    {datagramSigningKey: "banana"},
-    {datagramSigningKey: "orange"},
-    {datagramSigningKey: "maserati"},
-    {datagramSigningKey: "apple"},
-    {datagramSigningKey: testSelfKey},
-  ]},
-]
-for (var i = 0; i < 100; i++) testRooms.push(testRooms[3])
+var testClients = []
+for (var clientI = 0; clientI < 100; clientI++) {
+  const selfId = "" + Math.random()
+  const client = {
+    datagramSigningKey: selfId,
+    identity: {datagramSigningKey: selfId},
+    hellos: {},
+  }
+  const hellos = [
+    {datagramSigningKey: "alice"},
+    {datagramSigningKey: "bob"},
+    {datagramSigningKey: "carl"},
+    {datagramSigningKey: "dave"},
+  ].slice(0, clientI % 3 + 1)
+  hellos.push({datagramSigningKey: selfId})
+  for (let hello of hellos) {
+    client.hellos[desert.helloId(hello)] = hello
+  }
+  client.messages = [
+    {senderHello: MessageList.kClientSender,
+      text: {body: "message from client"}},
+    {senderHello: MessageList.kSelfSender,
+      text: {body: "message from self"}},
+  ]
+  for (var messageI = 0; messageI < 100; messageI++) {
+    client.messages.push({
+      senderHello: hellos[parseInt(Math.random() * hellos.length)],
+      text: {body: `my favorite number is ${parseInt(Math.random() * 100)}`}
+    })
+  }
+  testClients.push(client)
+}
 
 class ChatView extends React.Component {
   constructor(props) {
@@ -587,13 +571,11 @@ class ChatView extends React.Component {
         <div style={{flex: 8}}>
             <MessageList
               client={this.props.client}
-              messages={testMessages}
             />
         </div>
         <div style={{flex: 1}}>
             <ParticipantList
               client={this.props.client}
-              hellos={testHellos}
             />
         </div>
       </div>
@@ -605,6 +587,7 @@ class HomeWindow extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
+      selectedIdx: undefined
     }
   }
 
@@ -615,14 +598,14 @@ class HomeWindow extends React.Component {
       }}>
         <div style={{flex: 1, backgroundColor: common.c.offBlack}}>
           <RoomList
-            clients={testRooms}
+            clients={testClients}
+            onSelect={(idx) => this.setState({selectedIdx: idx})}
           />
         </div>
         <div style={{flex: 8}}>
-          <ChatView
-            client={testSelfClient}
-            hellos={testHellos}
-          />
+          {this.state.selectedIdx !== undefined && (<ChatView
+            client={testClients[this.state.selectedIdx]}
+          />)}
         </div>
       </div>
     )
