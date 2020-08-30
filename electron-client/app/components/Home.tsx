@@ -12,8 +12,8 @@ const Split = require('react-split')
 import Dropdown from 'react-dropdown';
 import 'react-dropdown/style.css';
 
-const kNewId = "new"
-const kIds = "identities"
+const kStoreIds = "identities"
+const kStoreClients = "clients"
 
 class RoomButton extends React.Component {
   constructor(props) {
@@ -38,6 +38,7 @@ class RoomButton extends React.Component {
         onClick={this.onClick.bind(this)}
         style={{
           height: 60,
+            marginLeft: 5, marginRight: 5,
             padding: 10,
             userSelect: "none",
             opacity: this.props.selected ? 0.5 : (this.state.hover ? 0.8 : 1),
@@ -97,14 +98,30 @@ class JoinDialog extends React.Component {
   }
 
   componentDidMount() {
-    const ids = {}// global.store.get(kIds) || {}  // TODO TODO
-    const dropdownIds = Object.values(ids).map(function(id) {
-      console.log({id})
-      return {
-        value: desert.helloId(id),
-        label: common.userName(undefined, id),
+    var ids = {}
+    try {
+      ids = global.store.get(kStoreIds) || {}
+    } catch(err) {
+      handleError(`Couldn't load saved state: ${err}`)
+      ids = {}
+    }
+    var tries = 0
+    var dropdownIds
+    while (tries < 2) {
+      try {
+        dropdownIds = Object.values(ids).map(function(id) {
+          return {
+            value: desert.helloId(id),
+            label: common.userName(undefined, id),
+          }
+        })
+        break
+      } catch(err) {
+        handleError(`Couldn't load saved state: ${err}`)
+        ids = {}
+        tries++
       }
-    })
+    }
     this.setState({ids, dropdownIds})
   }
 
@@ -148,7 +165,11 @@ class JoinDialog extends React.Component {
       ids[desert.helloId(id)] = id
       const dropdownIds = this.state.dropdownIds
       dropdownIds.unshift({value: desert.helloId(id), label: common.userName(undefined, id)})
-      global.store.set(kIds, ids)
+      try {
+        global.store.set(kStoreIds, ids)
+      } catch(err) {
+        common.handleError(`Failed to save: ${err}`)
+      }
       this.setState({ids, dropdownIds})
     } else {
       id = this.state.ids[this.state.selectedIdentity.value]
@@ -245,12 +266,12 @@ class JoinDialog extends React.Component {
               <br/>
               <label>
                 {"2. Choose an identity:"}
-                <Dropdown options={[{value: kNewId, label: "Create new..."}].concat(this.state.dropdownIds)}
+                <Dropdown options={[{value: JoinDialog.kNewId, label: "Create new..."}].concat(this.state.dropdownIds)}
                   onChange={this.onSelectIdentity}
                   value={this.state.selectedIdentity}
       placeholder="Saved identities" />
   </label>
-      {(this.state.selectedIdentity || {}).value == kNewId && (
+      {(this.state.selectedIdentity || {}).value == JoinDialog.kNewId && (
               <label>
                 <div style={{display: "flex"}}>
                   <input style={{fontSize: 24, resize: "none", width: "20%", color: "green"}}
@@ -269,6 +290,7 @@ class JoinDialog extends React.Component {
     );
   }
 }
+JoinDialog.kNewId = "new"
 
 class ParticipantList extends React.Component {
   constructor(props) {
@@ -276,6 +298,9 @@ class ParticipantList extends React.Component {
     this.scrollView = undefined
     this.renderItem = this.renderItem.bind(this)
     this.renderSeparator = this.renderSeparator.bind(this)
+    this.state = {
+      update: false
+    }
   }
 
   renderItem(userHello, idx) {
@@ -338,6 +363,7 @@ class RoomList extends React.Component {
     this.renderSeparator = this.renderSeparator.bind(this)
     this.state = {
       selectedIdx: null,
+      update: false,
     }
   }
 
@@ -359,6 +385,7 @@ class RoomList extends React.Component {
           if (aName == bName) return 0
           return aName < bName ? -1 : 1
         })
+        others.unshift(client.identity)
         var nameList = others.slice(0, maxNames).map(common.userName).join(", ")
         if (others.length > maxNames) {
           roomName = nameList + ` + ${others.length - maxNames}`
@@ -445,6 +472,10 @@ class MessageList extends React.Component {
     this.scrollToBottom = this.scrollToBottom.bind(this)
     this.renderMessage = this.renderMessage.bind(this)
     this.renderSeparator = this.renderSeparator.bind(this)
+    this.state = {
+      update: false
+    }
+    this.id = parseInt(Math.random() * 1000000)
   }
 
   scrollToBottom() {
@@ -633,9 +664,13 @@ class ChatView extends React.Component {
       update: false,
     }
     this.messageList = undefined
+    this.id = parseInt(Math.random() * 1000000)
   }
 
-  onSend(body) {
+  async onSend(body) {
+    console.log("onSend", {id: this.id,
+      client: this.props.client.name()})
+    await this.props.client.sendText(body) 
     this.props.client.messages.push({
       senderHello: MessageList.kSelfSender,
       text: {body},
@@ -679,13 +714,56 @@ class HomeWindow extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      selectedIdx: undefined
+      selectedIdx: undefined,
+      clients: [],
+      update: false,
     }
   }
 
+  componentDidMount() {
+    global.store.set(kStoreClients, this.state.clients)   // TODO temp
+    var clients = []
+    try {
+      clients = global.store.get(kStoreClients) || []
+      console.debug("loaded clients", {clients})
+    } catch(err) {
+      common.handleError(`Failed to load rooms: ${err}`)
+    }
+    this.setState({clients})
+  }
+
   onJoinRoom(client) {
-    testClients.unshift(client)
-    this.setState({selectedIdx: 0})
+    this.state.clients.unshift(client)
+    try {
+      global.store.set(kStoreClients, this.state.clients) 
+    } catch(err) {
+      common.handleError(`Failed to save rooms: ${err}`)
+    }
+
+    // TODO: optimize
+    client.pubsub.sub("receivedText", function(e) {
+      console.log("receivedText")
+      client.messages.push(e)
+      this.setState({update: !this.state.update})
+    }.bind(this))
+    client.pubsub.sub("userJoined", function(e) {
+      console.log("userJoined")
+      setTimeout(function() {
+        this.setState({update: !this.state.update})
+      }.bind(this), 100)
+    }.bind(this))
+    client.pubsub.sub("selfJoined", function(e) {
+      console.log("selfJoined")
+      setTimeout(function() {
+        this.setState({update: !this.state.update})
+      }.bind(this), 100)
+    }.bind(this))
+
+    this.setState({
+      selectedIdx: 0,
+      clients: this.state.clients,
+      update: !this.state.update,
+    })
   }
 
   render() {
@@ -695,14 +773,14 @@ class HomeWindow extends React.Component {
       }}>
         <div style={{flex: 1, backgroundColor: common.c.offBlack}}>
           <RoomList
-            clients={testClients}
+            clients={this.state.clients}
             onSelect={(idx) => this.setState({selectedIdx: idx})}
             onPressNew={(idx) => this.setState({selectedIdx: undefined})}
           />
         </div>
         <div style={{flex: 8}}>
           {this.state.selectedIdx !== undefined && (<ChatView
-            client={testClients[this.state.selectedIdx]}
+            client={this.state.clients[this.state.selectedIdx]}
           />)}
           {this.state.selectedIdx === undefined && (
             <JoinDialog

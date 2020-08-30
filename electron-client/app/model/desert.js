@@ -1,6 +1,7 @@
 const protobuf = require("protobufjs");
 const nacl = require('tweetnacl');
 const naclUtil = require('tweetnacl-util');
+const {PubSub} = require('./pubsub')
 
 
 const DEBUG = false
@@ -23,6 +24,27 @@ function newSocket(hostname) {
   })
 }
 
+const setJsonSerialization = function(keyPair) {
+  keyPair.toJSON = function(_) {
+    return {
+      publicKey: Array.from(keyPair.publicKey),
+      secretKey: Array.from(keyPair.secretKey),
+    }
+  }.bind(keyPair)
+}
+
+const newSignKeyPair = function() {
+  const ret = nacl.sign.keyPair()
+  setJsonSerialization(ret)
+  return ret
+}
+
+const newBoxKeyPair = function() {
+  const ret = nacl.box.keyPair()
+  setJsonSerialization(ret)
+  return ret
+}
+
 // Returns a key that unique identifies a hello or local identity
 const helloId = function(hello) {
   var key = hello.datagramSigningKey
@@ -41,13 +63,14 @@ class Client {
     this.pendingRequests = {}
     this.c2sCounter = 0  // Client-to-server sequence number.
     this.c2cCounters = {}  // Map from destination channel ID to integer.
-    this.signPair = nacl.box.keyPair()
-    this.encryptPair = nacl.box.keyPair()
+    this.signPair = newBoxKeyPair()
+    this.encryptPair = newBoxKeyPair()
     this.dmChannelId = undefined
     this.identity = options.identity || makeIdentity()
     this.identity.datagramSignPair.publicKey = new Uint8Array(this.identity.datagramSignPair.publicKey)
     this.identity.datagramSignPair.secretKey = new Uint8Array(this.identity.datagramSignPair.secretKey)
-    console.log("identity", this.identity, {options})
+    setJsonSerialization(this.identity.datagramSignPair)
+    this.pubsub = new PubSub()
   }
 
   isInitialized() {
@@ -203,7 +226,7 @@ class RoomMasterClient extends Client {
       // TODO add room profile
     })
     const invitationBytes = this.proto.client.RoomInvitation.encode(invitation).finish()
-    if (this.onSelfJoined) this.onSelfJoined()
+    this.pubsub.pub("selfJoined", {})
     return naclUtil.encodeBase64(invitationBytes)
   }
 
@@ -253,7 +276,7 @@ class RoomMasterClient extends Client {
         }.bind(this)))
       ])
       this.hellos[helloId(hello)] = sd
-      if (this.onUserJoined) this.onUserJoined(hello.datagram.hello)
+      this.pubsub.pub("userJoined", {hello})
     }
   }
 }
@@ -294,16 +317,22 @@ class RoomParticipantClient extends Client {
     return (hello.userProfile || {}).displayName || "anon"
   }
 
+  helloId() {
+    return helloId(this.identity)    
+  }
+
   name() {
-    return `[RoomParticipantClient ${helloId(this.identity)}]`
+    return `[RoomParticipantClient ${this.helloId()}]`
   }
 
   onReceiveText(senderHello, text) {
     console.info(`${this.name()} message from ${this.displayName(senderHello)}: ${text.body}`)
+    this.pubsub.pub("receivedText", {senderHello, text})
   }
 
   onReceiveVideo(senderHello, video) {
     console.info(`${this.name()} video buffer from ${this.displayName(senderHello)}`)
+    this.pubsub.pub("receivedVideo", {senderHello, video})
   }
 
   async handleC2C(message) {
@@ -372,7 +401,7 @@ class RoomParticipantClient extends Client {
         }
         if (this.hellos[helloId(hello)] === undefined) {
           this.hellos[helloId(hello)] = hello
-          if (this.onUserJoined) this.onUserJoined(hello)
+          this.pubsub.pub("userJoined", {hello})
         }
       }
       this.roomProfile = datagram.masterHello.roomProfile
@@ -380,7 +409,9 @@ class RoomParticipantClient extends Client {
       const wasInRoom = this.isInRoom()
       this.roomChannelId = datagram.masterHello.roomChannelId
       await this.subscribeToChannel(this.roomChannelId)
-      if (!wasInRoom && this.onSelfJoined) this.onSelfJoined()
+      if (!wasInRoom) {
+        this.pubsub.pub("selfJoined", {})
+      }
     }
     else if (datagram.text) {
       const senderHello = this.hellos[srcUuid]
@@ -489,7 +520,7 @@ async function makeMasterClient(hostname) {
 function makeIdentity() {
   return {
     displayName: "",
-    datagramSignPair: nacl.sign.keyPair(),
+    datagramSignPair: newSignKeyPair(),
   }
 }
 

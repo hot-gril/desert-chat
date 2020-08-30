@@ -9,8 +9,13 @@ const color = {
   selfText: "#ade2ff",
 }
 
+// `identity` field is deprecated; just pass a hello or identity into `hello`
 userName = function(hello, identity) {
   hello = hello || {}
+  if (hello && !identity && !hello.datagramSigningKey) {  // detects type of `hello`
+    identity = hello
+    hello = {}
+  }
   identity = identity || {}
   return (hello.userProfile || {}).displayName || identity.displayName
     || ("anon " + Buffer.from(hello.datagramSigningKey || identity.datagramSignPair.publicKey).toString("hex").substr(0, 7))
