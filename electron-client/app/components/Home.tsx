@@ -558,28 +558,109 @@ for (var clientI = 0; clientI < 100; clientI++) {
   testClients.push(client)
 }
 
+class ComposerView extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      text: "",
+    }
+    this.textInput = ""
+  }
+
+  handleChange(event) {
+    this.setState({text: event.target.value})
+  }
+
+  send() {
+    if (this.props.onSend) {
+      this.props.onSend(this.state.text)
+    }
+    this.setState({text: ""})
+  }
+
+  render() {
+    return (
+      <form onSubmit={this.send.bind(this)}
+        style={{display: "flex", width: "100%", height: "100%"}}>
+        <div style={{height: "100%", flex: 1, display: "flex"}}>
+          <input
+            type="text"
+            ref={el => this.textInput = el}
+            style={{
+              flex: 1,
+                display: "flex",
+              resize: "none",
+                fontFamily: "monospace",
+                fontSize: 24,
+            }}
+            value={this.state.text}
+            onChange={this.handleChange.bind(this)}/>
+        </div>
+        <div
+          onClick={this.send.bind(this)}
+          style={{
+            height: "100%",
+            backgroundColor: common.color.specialWine,
+            color: common.color.text,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            textAlign: "center",
+            fontSize: 30
+          }}>
+          {"|Send|"}
+        </div>
+      </form>
+    )
+  }
+}
+
 class ChatView extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
+      update: false,
+    }
+    this.messageList = undefined
+  }
+
+  onSend(body) {
+    this.props.client.messages.push({
+      senderHello: MessageList.kSelfSender,
+      text: {body},
+    })
+    this.setState({update: !this.state.update})
+    if (this.messageList) {
+      setTimeout(() => {
+        this.messageList.scrollToBottom()
+      })
     }
   }
 
   render() {
     return (
-      <div style={{display: "flex", width: "100%", height: "100%"}}>
-        <div style={{flex: 8}}>
-            <MessageList
-              client={this.props.client}
-            />
-        </div>
-        <div style={{flex: 1}}>
+      <div style={{display: "flex", width: "100%", height: "100%",
+          flexDirection: "row"}}>
+          <div style={{display: "flex", flex: 8, flexDirection: "column"}}>
+            <div style={{flex: 8, height: 0}}>
+              <MessageList
+                ref={el => this.messageList = el}
+                client={this.props.client}
+              />
+            </div>
+            <div style={{height: 60, overflowY: "scroll"}}>
+              <ComposerView
+                onSend={this.onSend.bind(this)}
+              />
+            </div>
+          </div>
+          <div style={{flex: 1}}>
             <ParticipantList
               client={this.props.client}
             />
+          </div>
         </div>
-      </div>
-    )
+      )
   }
 }
 
