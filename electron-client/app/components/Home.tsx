@@ -40,7 +40,7 @@ class RoomButton extends React.Component {
           height: 60,
             padding: 10,
             userSelect: "none",
-            opacity: this.props.selected ? 0.5 : (this.state.hover ? 0.9 : 1),
+            opacity: this.props.selected ? 0.5 : (this.state.hover ? 0.8 : 1),
             backgroundColor: isNew ? common.color.specialWine : common.color.wine,
             borderColor: common.color.white,
             borderStyle: "solid",
@@ -97,8 +97,9 @@ class JoinDialog extends React.Component {
   }
 
   componentDidMount() {
-    const ids = global.store.get(kIds) || {}
+    const ids = {}// global.store.get(kIds) || {}  // TODO TODO
     const dropdownIds = Object.values(ids).map(function(id) {
+      console.log({id})
       return {
         value: desert.helloId(id),
         label: common.userName(undefined, id),
@@ -161,12 +162,6 @@ class JoinDialog extends React.Component {
 
   async joinRoom(invitationCode, identity) {
     try {
-      var win = new BrowserWindow({
-        width: 2000, height: 1000,
-        webPreferences: { nodeIntegration: true}
-      } )
-      win.on('close', function () { win = null })
-      //win.loadURL(`file://${__dirname}/app.html#${routes.ROOM}?invitationCode=${encodeURIComponent(code)}`)
       const options = {
         invitationCode,
         hostname: this.state.hostname,
@@ -178,12 +173,24 @@ class JoinDialog extends React.Component {
           }
         },
       }
-      console.debug("joining room with options", options)
-      win.loadURL(`file://${electron.remote.app.getAppPath()}/app.html#${routes["ROOM"]}?options=${encodeURIComponent(JSON.stringify(options))}`)
-      win.show()
+      const client = await desert.makeParticipantClient(options)
+      if (!options.invitationCode) {
+        const masterClient = await desert.makeMasterClient(options.hostname)
+        options.invitationCode = await masterClient.createRoom()
+        client.masterClient = masterClient
+        electron.clipboard.writeText(options.invitationCode)
+        client.messages.push({
+          senderHello: MessageList.kClientSender,
+              text: {body: `Copied invitation code to clipboard: ${options.invitationCode}`},
+        })
+      }
+      await client.joinRoom(options.invitationCode)
+      if (this.props.onJoinRoom) {
+        this.props.onJoinRoom(client)
+      }
       this.setState({selectedIdentity: null, username: ""})
     } catch(e) {
-      this.handleError(e)
+      common.handleError(e)
     }
   }
 
@@ -401,6 +408,10 @@ class RoomList extends React.Component {
             isNew={true}
             selected={false}
             onClick={() => {
+              this.setState({selectedIdx: undefined})
+              if (this.props.onSelect) {
+                this.props.onPressNew()
+              }
             }}
           >
             {"+"}
@@ -487,7 +498,7 @@ class MessageList extends React.Component {
               wordWrap: "break-word",
               display: "block",
               textAlign,
-              width: "100%",
+              width: 500,//"100%",
               whiteSpace: "normal",
           }}>
             <span style={messageStyle}>
@@ -672,6 +683,11 @@ class HomeWindow extends React.Component {
     }
   }
 
+  onJoinRoom(client) {
+    testClients.unshift(client)
+    this.setState({selectedIdx: 0})
+  }
+
   render() {
     return (
       <div style={{display: "flex", width: "100%", height: "100%",
@@ -681,12 +697,18 @@ class HomeWindow extends React.Component {
           <RoomList
             clients={testClients}
             onSelect={(idx) => this.setState({selectedIdx: idx})}
+            onPressNew={(idx) => this.setState({selectedIdx: undefined})}
           />
         </div>
         <div style={{flex: 8}}>
           {this.state.selectedIdx !== undefined && (<ChatView
             client={testClients[this.state.selectedIdx]}
           />)}
+          {this.state.selectedIdx === undefined && (
+            <JoinDialog
+              onJoinRoom={this.onJoinRoom.bind(this)}
+            />
+          )}
         </div>
       </div>
     )

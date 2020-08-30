@@ -265,6 +265,7 @@ class RoomParticipantClient extends Client {
     this.roomProfile = undefined
     this.roomMasterPubSigningKey = undefined
     this.hellos = {}  // Map from uuid to Hello (different from RoomMasterClient's map).
+    this.messages = []
   }
 
   async init() {
