@@ -24,24 +24,13 @@ function newSocket(hostname) {
   })
 }
 
-const setJsonSerialization = function(keyPair) {
-  keyPair.toJSON = function(_) {
-    return {
-      publicKey: Array.from(keyPair.publicKey),
-      secretKey: Array.from(keyPair.secretKey),
-    }
-  }.bind(keyPair)
-}
-
 const newSignKeyPair = function() {
   const ret = nacl.sign.keyPair()
-  setJsonSerialization(ret)
   return ret
 }
 
 const newBoxKeyPair = function() {
   const ret = nacl.box.keyPair()
-  setJsonSerialization(ret)
   return ret
 }
 
@@ -67,9 +56,9 @@ class Client {
     this.encryptPair = newBoxKeyPair()
     this.dmChannelId = undefined
     this.identity = options.identity || makeIdentity()
+    console.log("Client constructor this.identity=", this.identity)
     this.identity.datagramSignPair.publicKey = new Uint8Array(this.identity.datagramSignPair.publicKey)
     this.identity.datagramSignPair.secretKey = new Uint8Array(this.identity.datagramSignPair.secretKey)
-    setJsonSerialization(this.identity.datagramSignPair)
     this.pubsub = new PubSub()
   }
 
@@ -297,7 +286,7 @@ class RoomParticipantClient extends Client {
     this.hellos = {}  // Map from uuid to Hello (different from RoomMasterClient's map).
     this.messages = []
     this.masterClient = undefined
-    this.invitationCode = undefined
+    this.invitationProto = undefined
   }
 
   async init() {
@@ -434,9 +423,14 @@ class RoomParticipantClient extends Client {
 
   async joinRoom(invitationCode) {
     if (this.isInRoom()) throw "already in a room"
-    this.invitationCode = invitationCode
-    const invitationBytes = naclUtil.decodeBase64(invitationCode)
-    const invitationProto = this.proto.client.RoomInvitation.decode(invitationBytes)
+    var invitationProto
+    if (invitationCode.constructor != String) {
+      invitationProto = invitationCode
+    } else {
+      const invitationBytes = naclUtil.decodeBase64(invitationCode)
+      invitationProto = this.proto.client.RoomInvitation.decode(invitationBytes)
+    }
+    this.invitationProto = invitationProto
     console.log("joinRoom 3")
     this.hostname = invitationProto.dmHostname
     this.ws = await newSocket(this.hostname)
@@ -501,6 +495,8 @@ const setup = async function() {
       Datagram: clientRoot.lookupType("desert.client.Datagram"),
       SignedDatagram: clientRoot.lookupType("desert.client.SignedDatagram"),
       RoomInvitation: clientRoot.lookupType("desert.client.RoomInvitation"),
+      SavedClient: clientRoot.lookupType("desert.client.SavedClient"),
+      SavedMasterClient: clientRoot.lookupType("desert.client.SavedMasterClient"),
     },
     server: {
       root: serverRoot,
@@ -538,94 +534,90 @@ function makeIdentity() {
     datagramSignPair: newSignKeyPair(),
   }
 }
-function participantToObject(client) {
-  // TODO this is a hacky mess
-  const ret = {
-    options: client.options,
-    invitationCode: client.invitationCode,
-    identity: client.identity,
+async function baseClientToProto(client) {
+  console.log("baseClientToProto", {client})
+  if (!proto) proto = await setup()
+  const ret = proto.client.SavedClient.create({
     hostname: client.hostname,
-  }
+    roomInvitation: client.invitationProto,
+    datagramSignSecret: client.identity.datagramSignPair.secretKey,
+    datagramSignPublic: client.identity.datagramSignPair.publicKey,
+    userProfile: proto.client.UserProfile.create({displayName:
+      client.identity.displayName}),
+  })
+  console.log("baseClientToProto", {client, ret})
+  return ret
+}
+async function masterClientToProto(client) {
+  if (!proto) proto = await setup()
+  return proto.client.SavedMasterClient.create({
+    base: baseClientToProto(client),
+    masterHello: proto.client.Datagram.create({
+      roomKey: client.roomKey,
+      roomChannelId: client.roomChannelId,
+      participantHellos: Object.values(client.hellos),
+    }),
+    dmChannelId: client.dm_channel_id,
+    dmSignSecret: client.signPair.secretKey,
+    dmSignPublic: client.signPair.publicKey,
+    dmEncryptSecret: client.encryptPair.secretKey,
+    dmEncryptPublic: client.encryptPair.publicKey,
+  })
+}
+async function participantToObject(client) {
+  if (!proto) proto = await setup()
+  const client64 = naclUtil.encodeBase64(proto.client.SavedClient.encode(
+  await baseClientToProto(client)).finish())
+  var master64
   if (client.masterClient) {
-    ret.masterClient = {
-      hostname: client.hostname,
-      hellos: client.masterClient.hellos,
-      roomChannelId: client.masterClient.roomChannelId,
-      roomKey: client.masterClient.roomKey,
-      signPair: client.masterClient.signPair,
-      encryptPair: client.masterClient.encryptPair,
-      dmChannelId: client.masterClient.dmChannelId,
-      identity: client.masterClient.identity,
-      invitationKey: client.masterClient.invitationKey,
-    }
+    master64 = naclUtil.encodeBase64(proto.client.SavedClient.
+      encode(await masterClientToProto(client.masterClient)).finish())
   }
-  console.log("participantToObject", {client, ret})
+  const ret = {client64, master64}
   return ret
 }
 async function objectToParticipant(object) {
-  // TODO this is a hacky mess
-  const fixKeyPair = function (keyPair) {
-    keyPair.publicKey = new Uint8Array(keyPair.publicKey);
-    keyPair.secretKey = new Uint8Array(keyPair.secretKey);
+  console.log("objectToParticipant 0", {object})
+  if (!proto) proto = await setup()
+  const clientPb = proto.client.SavedClient.decode(naclUtil.decodeBase64(object.client64))
+  console.log("objectToParticipant 0.5", {clientPb})
+  const datagramSignPair = {
+      secretKey: clientPb.datagramSignSecret,
+      publicKey: clientPb.datagramSignPublic,
   }
+  const client = await makeParticipantClient({identity: {
+    displayName: clientPb.userProfile.displayName,
+    datagramSignPair,
+  }})
+  client.hostname = clientPb.hostname
+  client.datagramSignPair = datagramSignPair
+  console.log("objectToParticipant 1", {clientPb, client})
+  if (clientPb.roomInvitation) {
+    await client.joinRoom(clientPb.roomInvitation)
+  }
+  console.log("objectToParticipant 2", {clientPb, client})
+  if (!object.master64) return client
 
-  const fixArray = function(dict) {
-    var i = 0
-    var ret = []
-    while (dict[i] !== undefined) {
-      ret.push(dict[i])
-      i++
-    }
-    return new Uint8Array(ret)
+  const masterPb = proto.client.SavedMasterClient.decode(naclUtil.decodeBase64(object.master64))
+  const base = masterPb.base
+  const master = new RoomMasterClient(proto,
+    await newSocket(base.hostname), base.hostname)
+  master.dmChannelId = masterPb.dmChannelId
+  master.signPair = {
+    secretKey: masterPb.dmSignSecret,
+    publicKey: masterPb.dmSignPublic,
   }
-
-  const fixHellos = function(hellos) {
-    const decode = function(base64) {
-      return naclUtil.decodeBase64(base64)
-    }
-    for (let hello of Object.values(hellos)) {
-      Object.assign(hello, {
-        signature: decode(hello.signature),
-        datagram: {
-          nonce: decode(hello.datagram.nonce),
-          hello: {
-            dmSigningKey: decode(hello.datagram.hello.dmSigningKey),
-            dmEncryptionKey: decode(hello.datagram.hello.dmEncryptionKey),
-            datagramSigningKey: decode(hello.datagram.hello.datagramSigningKey),
-          }
-        }
-      })
-    }
+  master.encryptPair = {
+    secretKey: masterPb.dmEncryptSecret,
+    publicKey: masterPb.dmEncryptPublic,
   }
-
-  const client = await makeParticipantClient(object.options)
-  client.identity = object.identity
-  client.hostname = object.hostname
-  fixKeyPair(client.identity.datagramSignPair)
-  if (object.masterClient) {
-    const masterClient = new RoomMasterClient(proto, await newSocket(object.masterClient.hostname), object.masterClient.hostname)
-    masterClient.hostname = object.masterClient.hostname
-    masterClient.hellos = object.masterClient.hellos
-    fixHellos(masterClient.hellos)
-    masterClient.roomChannelId = object.masterClient.roomChannelId
-    masterClient.roomKey = object.masterClient.roomKey
-    masterClient.signPair = object.masterClient.signPair
-    fixKeyPair(masterClient.signPair)
-    masterClient.encryptPair = object.masterClient.encryptPair
-    fixKeyPair(masterClient.encryptPair)
-    masterClient.dmChannelId = object.masterClient.dmChannelId
-    masterClient.identity = object.masterClient.identity
-    fixKeyPair(masterClient.identity.datagramSignPair)
-    masterClient.invitationKey = object.masterClient.invitationKey
-    masterClient.roomKey = fixArray(masterClient.roomKey)
-    masterClient.invitationKeyKey = fixArray(masterClient.invitationKey)
-    client.masterClient = masterClient
-    await masterClient.init()
-    await masterClient.subscribeToChannel(masterClient.dmChannelId)
-  }
-  console.log("objectToParticipant 1", {object, client})
-  await client.joinRoom(object.invitationCode || object.options.invitationCode)
-  console.log("objectToParticipant 2", {object, client})
+  master.roomChannelId = masterPb.masterHello.roomChannelId
+  master.roomKey = masterPb.masterHello.roomKey
+  master.invitationKey = masterPb.masterHello.invitationKey
+  await master.init()
+  await master.subscribeToChannel(master.dmChannelId)
+  client.masterClient = master
+  console.log("objectToParticipant 3", {clientPb, masterPb, client})
   return client
 }
 

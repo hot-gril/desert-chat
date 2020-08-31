@@ -189,6 +189,7 @@ class JoinDialog extends React.Component {
   }
 
   async joinRoom(invitationCode, identity) {
+    console.log("joinRoom", {invitationCode, identity})
     try {
       const options = {
         invitationCode,
@@ -736,7 +737,7 @@ class HomeWindow extends React.Component {
       try {
         var clients = global.store.get(kStoreClients) || []
         clients = await Promise.all(clients.map(desert.objectToParticipant))
-        console.debug("loaded clients", {clients})
+        console.debug("loaded clients", clients)
         this.setState({clients})
       } catch(err) {
         common.handleError(`Failed to load rooms: ${err}`)
@@ -745,13 +746,18 @@ class HomeWindow extends React.Component {
   }
 
   onJoinRoom(client) {
-    this.state.clients.unshift(client)
-    try {
-      global.store.set(kStoreClients,
-        this.state.clients.map(desert.participantToObject)) 
-    } catch(err) {
-      common.handleError(`Failed to save rooms: ${err}`)
-    }
+    console.log("onJoinRoom", {clients: this.state.clients, client})
+    this.state.clients.unshift(client);
+    (async function() {
+      try {
+        const clients = await Promise.all(
+          this.state.clients.map(desert.participantToObject)
+        )
+        global.store.set(kStoreClients, clients)
+      } catch(err) {
+        common.handleError(`Failed to save rooms: ${err}`)
+      }
+    }.bind(this))()
 
     // TODO: optimize
     client.pubsub.sub("receivedText", function(e) {
