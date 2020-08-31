@@ -101,10 +101,17 @@ class JoinDialog extends React.Component {
     var ids = {}
     try {
       ids = global.store.get(kStoreIds) || {}
+      for (let id of Object.values(ids)) {
+        id.datagramSignPair = {
+          publicKey: new Uint8Array(id.datagramSignPair.publicKey),
+          secretKey: new Uint8Array(id.datagramSignPair.secretKey),
+        }
+      }
     } catch(err) {
       handleError(`Couldn't load saved state: ${err}`)
       ids = {}
     }
+    console.log("loaded ids", ids)
     var tries = 0
     var dropdownIds
     while (tries < 2) {
@@ -670,7 +677,11 @@ class ChatView extends React.Component {
   async onSend(body) {
     console.log("onSend", {id: this.id,
       client: this.props.client.name()})
-    await this.props.client.sendText(body) 
+    try {
+      await this.props.client.sendText(body) 
+    } catch(err) {
+      common.handleError(err)
+    }
     this.props.client.messages.push({
       senderHello: MessageList.kSelfSender,
       text: {body},
@@ -721,21 +732,23 @@ class HomeWindow extends React.Component {
   }
 
   componentDidMount() {
-    global.store.set(kStoreClients, this.state.clients)   // TODO temp
-    var clients = []
-    try {
-      clients = global.store.get(kStoreClients) || []
-      console.debug("loaded clients", {clients})
-    } catch(err) {
-      common.handleError(`Failed to load rooms: ${err}`)
-    }
-    this.setState({clients})
+    (async function() {
+      try {
+        var clients = global.store.get(kStoreClients) || []
+        clients = await Promise.all(clients.map(desert.objectToParticipant))
+        console.debug("loaded clients", {clients})
+        this.setState({clients})
+      } catch(err) {
+        common.handleError(`Failed to load rooms: ${err}`)
+      }
+    }.bind(this))()
   }
 
   onJoinRoom(client) {
     this.state.clients.unshift(client)
     try {
-      global.store.set(kStoreClients, this.state.clients) 
+      global.store.set(kStoreClients,
+        this.state.clients.map(desert.participantToObject)) 
     } catch(err) {
       common.handleError(`Failed to save rooms: ${err}`)
     }

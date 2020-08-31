@@ -187,6 +187,7 @@ class Client {
     if (symmetricKey) {
       boxed = nacl.secretbox(signedDatagramBytes, nonce, Buffer.from(symmetricKey))
     } else {
+      console.log({signedDatagramBytes, nonce, encryptionKey, secretKey: this.signPair.secretKey})
       boxed = nacl.box(signedDatagramBytes, nonce,
         Buffer.from(encryptionKey), Buffer.from(this.signPair.secretKey))
     }
@@ -207,6 +208,7 @@ class RoomMasterClient extends Client {
     this.hellos = {}  // Map from uuid to SignedDatagram containing hello.
     this.roomKey = undefined
     this.roomChannelId = undefined
+    this.invitationKey = undefined
   }
 
   hasRoom() { return this.roomChannelId != undefined }
@@ -216,13 +218,13 @@ class RoomMasterClient extends Client {
     if (this.hasRoom()) throw "already controlling a room"
     const roomChannelId = await this.createChannel(false)
     this.roomChannelId = roomChannelId
-    const invitationKey = nacl.randomBytes(16)
+    this.invitationKey = nacl.randomBytes(16)
     const invitation = this.proto.client.RoomInvitation.create({
       dmChannelId: this.dmChannelId,
       dmHostname: this.hostname,
       dmSigningKey: this.signPair.publicKey,
       dmEncryptionKey: this.encryptPair.publicKey,
-      invitationKey: invitationKey,
+      invitationKey: this.invitationKey,
       // TODO add room profile
     })
     const invitationBytes = this.proto.client.RoomInvitation.encode(invitation).finish()
@@ -236,6 +238,7 @@ class RoomMasterClient extends Client {
 
   async handleC2C(message) {
     const pubSigningKey = Buffer.from(message.incomingDatagram.srcPublicSigningKey)
+    console.log("handleC2C", {message, pubSigningKey, secret: this.encryptPair.secretKey})
     const signedDatagramData = nacl.box.open(
       Buffer.from(message.incomingDatagram.payload),
       Buffer.from(message.incomingDatagram.nonce),
@@ -248,6 +251,10 @@ class RoomMasterClient extends Client {
 
     const hello = datagram.hello
     if (hello) {
+      if (hello.invitationKey != this.invitationKey) {
+        console.log("mistmatched invitation key")
+        debug(`${this.name()} ignoring hello with mismatched invitation key`, {expected: this.invitationKey, actual: hello.invitationKey})
+      }
       this.roomKey = nacl.randomBytes(nacl.secretbox.keyLength)
       const newMasterHello = this.proto.client.Datagram.create({
         masterHello: this.proto.client.MasterHello.create({
@@ -289,6 +296,8 @@ class RoomParticipantClient extends Client {
     this.roomMasterPubSigningKey = undefined
     this.hellos = {}  // Map from uuid to Hello (different from RoomMasterClient's map).
     this.messages = []
+    this.masterClient = undefined
+    this.invitationCode = undefined
   }
 
   async init() {
@@ -395,6 +404,7 @@ class RoomParticipantClient extends Client {
         const dg = sd.datagram
         const hello = dg.hello
         const dge = this.proto.client.Datagram.encode(dg).finish()
+        console.log({dge, signature: sd.signature, dsk: hello.datagramSigningKey})
         if (!nacl.sign.detached.verify(dge, sd.signature, hello.datagramSigningKey)) {
           console.warn(`${this.name()} ignoring signed hello datagram with invalid signature: ${sd}`)
           continue
@@ -424,13 +434,17 @@ class RoomParticipantClient extends Client {
 
   async joinRoom(invitationCode) {
     if (this.isInRoom()) throw "already in a room"
+    this.invitationCode = invitationCode
     const invitationBytes = naclUtil.decodeBase64(invitationCode)
     const invitationProto = this.proto.client.RoomInvitation.decode(invitationBytes)
+    console.log("joinRoom 3")
     this.hostname = invitationProto.dmHostname
     this.ws = await newSocket(this.hostname)
     this.roomInvitation = invitationProto
     this.roomMasterPubSigningKey = Buffer.from(invitationProto.dmSigningKey)
+    console.log("joinRoom 4")
     await this.init()
+    console.log("joinRoom 5")
     const datagram = this.proto.client.Datagram.create({
       hello: this.hello,
     })
@@ -438,6 +452,7 @@ class RoomParticipantClient extends Client {
       hostname: invitationProto.dmHostname,
       encryptionKey: invitationProto.dmEncryptionKey, datagram,
       includeIdentity: true})
+    console.log("joinRoom 6")
   }
 
   async sendText(body) {
@@ -523,9 +538,101 @@ function makeIdentity() {
     datagramSignPair: newSignKeyPair(),
   }
 }
+function participantToObject(client) {
+  // TODO this is a hacky mess
+  const ret = {
+    options: client.options,
+    invitationCode: client.invitationCode,
+    identity: client.identity,
+    hostname: client.hostname,
+  }
+  if (client.masterClient) {
+    ret.masterClient = {
+      hostname: client.hostname,
+      hellos: client.masterClient.hellos,
+      roomChannelId: client.masterClient.roomChannelId,
+      roomKey: client.masterClient.roomKey,
+      signPair: client.masterClient.signPair,
+      encryptPair: client.masterClient.encryptPair,
+      dmChannelId: client.masterClient.dmChannelId,
+      identity: client.masterClient.identity,
+      invitationKey: client.masterClient.invitationKey,
+    }
+  }
+  console.log("participantToObject", {client, ret})
+  return ret
+}
+async function objectToParticipant(object) {
+  // TODO this is a hacky mess
+  const fixKeyPair = function (keyPair) {
+    keyPair.publicKey = new Uint8Array(keyPair.publicKey);
+    keyPair.secretKey = new Uint8Array(keyPair.secretKey);
+  }
+
+  const fixArray = function(dict) {
+    var i = 0
+    var ret = []
+    while (dict[i] !== undefined) {
+      ret.push(dict[i])
+      i++
+    }
+    return new Uint8Array(ret)
+  }
+
+  const fixHellos = function(hellos) {
+    const decode = function(base64) {
+      return naclUtil.decodeBase64(base64)
+    }
+    for (let hello of Object.values(hellos)) {
+      Object.assign(hello, {
+        signature: decode(hello.signature),
+        datagram: {
+          nonce: decode(hello.datagram.nonce),
+          hello: {
+            dmSigningKey: decode(hello.datagram.hello.dmSigningKey),
+            dmEncryptionKey: decode(hello.datagram.hello.dmEncryptionKey),
+            datagramSigningKey: decode(hello.datagram.hello.datagramSigningKey),
+          }
+        }
+      })
+    }
+  }
+
+  const client = await makeParticipantClient(object.options)
+  client.identity = object.identity
+  client.hostname = object.hostname
+  fixKeyPair(client.identity.datagramSignPair)
+  if (object.masterClient) {
+    const masterClient = new RoomMasterClient(proto, await newSocket(object.masterClient.hostname), object.masterClient.hostname)
+    masterClient.hostname = object.masterClient.hostname
+    masterClient.hellos = object.masterClient.hellos
+    fixHellos(masterClient.hellos)
+    masterClient.roomChannelId = object.masterClient.roomChannelId
+    masterClient.roomKey = object.masterClient.roomKey
+    masterClient.signPair = object.masterClient.signPair
+    fixKeyPair(masterClient.signPair)
+    masterClient.encryptPair = object.masterClient.encryptPair
+    fixKeyPair(masterClient.encryptPair)
+    masterClient.dmChannelId = object.masterClient.dmChannelId
+    masterClient.identity = object.masterClient.identity
+    fixKeyPair(masterClient.identity.datagramSignPair)
+    masterClient.invitationKey = object.masterClient.invitationKey
+    masterClient.roomKey = fixArray(masterClient.roomKey)
+    masterClient.invitationKeyKey = fixArray(masterClient.invitationKey)
+    client.masterClient = masterClient
+    await masterClient.init()
+    await masterClient.subscribeToChannel(masterClient.dmChannelId)
+  }
+  console.log("objectToParticipant 1", {object, client})
+  await client.joinRoom(object.invitationCode || object.options.invitationCode)
+  console.log("objectToParticipant 2", {object, client})
+  return client
+}
 
 module.exports = {
   makeParticipantClient,
+  participantToObject,
+  objectToParticipant,
   makeMasterClient,
   makeIdentity,
   helloId,

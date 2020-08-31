@@ -22,8 +22,8 @@ userName = function(hello, identity) {
 }
 
 handleError = function(e) {
-    console.error({e})
-    alert(e)
+  console.error(e, e.stack)
+  alert(e)
 }
 
 module.exports = {
