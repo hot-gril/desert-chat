@@ -4,10 +4,10 @@ const naclUtil = require('tweetnacl-util');
 const {PubSub} = require('./pubsub')
 
 
-const DEBUG = false
+const DEBUG = true//false
 function debug() {
   if (!DEBUG) return
-  console.debug(arguments)
+  console.debug(...arguments)
 }
 
 const inspect = function(obj) {
@@ -24,13 +24,24 @@ function newSocket(hostname) {
   })
 }
 
+const setJsonSerialization = function(keyPair) {
+  keyPair.toJSON = function(_) {
+    return {
+      publicKey: Array.from(keyPair.publicKey),
+      secretKey: Array.from(keyPair.secretKey),
+    }
+  }.bind(keyPair)
+}
+
 const newSignKeyPair = function() {
   const ret = nacl.sign.keyPair()
+  setJsonSerialization(ret)
   return ret
 }
 
 const newBoxKeyPair = function() {
   const ret = nacl.box.keyPair()
+  setJsonSerialization(ret)
   return ret
 }
 
@@ -56,9 +67,9 @@ class Client {
     this.encryptPair = newBoxKeyPair()
     this.dmChannelId = undefined
     this.identity = options.identity || makeIdentity()
-    console.log("Client constructor this.identity=", this.identity)
     this.identity.datagramSignPair.publicKey = new Uint8Array(this.identity.datagramSignPair.publicKey)
     this.identity.datagramSignPair.secretKey = new Uint8Array(this.identity.datagramSignPair.secretKey)
+    setJsonSerialization(this.identity.datagramSignPair)
     this.pubsub = new PubSub()
   }
 
@@ -176,7 +187,6 @@ class Client {
     if (symmetricKey) {
       boxed = nacl.secretbox(signedDatagramBytes, nonce, Buffer.from(symmetricKey))
     } else {
-      console.log({signedDatagramBytes, nonce, encryptionKey, secretKey: this.signPair.secretKey})
       boxed = nacl.box(signedDatagramBytes, nonce,
         Buffer.from(encryptionKey), Buffer.from(this.signPair.secretKey))
     }
@@ -227,7 +237,6 @@ class RoomMasterClient extends Client {
 
   async handleC2C(message) {
     const pubSigningKey = Buffer.from(message.incomingDatagram.srcPublicSigningKey)
-    console.log("handleC2C", {message, pubSigningKey, secret: this.encryptPair.secretKey})
     const signedDatagramData = nacl.box.open(
       Buffer.from(message.incomingDatagram.payload),
       Buffer.from(message.incomingDatagram.nonce),
@@ -241,7 +250,6 @@ class RoomMasterClient extends Client {
     const hello = datagram.hello
     if (hello) {
       if (hello.invitationKey != this.invitationKey) {
-        console.log("mistmatched invitation key")
         debug(`${this.name()} ignoring hello with mismatched invitation key`, {expected: this.invitationKey, actual: hello.invitationKey})
       }
       this.roomKey = nacl.randomBytes(nacl.secretbox.keyLength)
@@ -393,7 +401,6 @@ class RoomParticipantClient extends Client {
         const dg = sd.datagram
         const hello = dg.hello
         const dge = this.proto.client.Datagram.encode(dg).finish()
-        console.log({dge, signature: sd.signature, dsk: hello.datagramSigningKey})
         if (!nacl.sign.detached.verify(dge, sd.signature, hello.datagramSigningKey)) {
           console.warn(`${this.name()} ignoring signed hello datagram with invalid signature: ${sd}`)
           continue
@@ -430,23 +437,21 @@ class RoomParticipantClient extends Client {
       const invitationBytes = naclUtil.decodeBase64(invitationCode)
       invitationProto = this.proto.client.RoomInvitation.decode(invitationBytes)
     }
+    console.log("joinRoom 1", {invitationCode, invitationProto})
     this.invitationProto = invitationProto
-    console.log("joinRoom 3")
     this.hostname = invitationProto.dmHostname
     this.ws = await newSocket(this.hostname)
     this.roomInvitation = invitationProto
     this.roomMasterPubSigningKey = Buffer.from(invitationProto.dmSigningKey)
-    console.log("joinRoom 4")
     await this.init()
-    console.log("joinRoom 5")
     const datagram = this.proto.client.Datagram.create({
       hello: this.hello,
     })
+    console.log("joinRoom 2", {self: this})
     await this.sendC2C({channelId: invitationProto.dmChannelId,
       hostname: invitationProto.dmHostname,
       encryptionKey: invitationProto.dmEncryptionKey, datagram,
       includeIdentity: true})
-    console.log("joinRoom 6")
   }
 
   async sendText(body) {
@@ -535,7 +540,6 @@ function makeIdentity() {
   }
 }
 async function baseClientToProto(client) {
-  console.log("baseClientToProto", {client})
   if (!proto) proto = await setup()
   const ret = proto.client.SavedClient.create({
     hostname: client.hostname,
@@ -545,24 +549,25 @@ async function baseClientToProto(client) {
     userProfile: proto.client.UserProfile.create({displayName:
       client.identity.displayName}),
   })
-  console.log("baseClientToProto", {client, ret})
   return ret
 }
 async function masterClientToProto(client) {
   if (!proto) proto = await setup()
-  return proto.client.SavedMasterClient.create({
-    base: baseClientToProto(client),
+  const ret = proto.client.SavedMasterClient.create({
+    base: await baseClientToProto(client),
     masterHello: proto.client.Datagram.create({
       roomKey: client.roomKey,
       roomChannelId: client.roomChannelId,
       participantHellos: Object.values(client.hellos),
     }),
-    dmChannelId: client.dm_channel_id,
+    dmChannelId: client.dmChannelId,
     dmSignSecret: client.signPair.secretKey,
     dmSignPublic: client.signPair.publicKey,
     dmEncryptSecret: client.encryptPair.secretKey,
     dmEncryptPublic: client.encryptPair.publicKey,
   })
+  console.log("masterClientToProto", {client, ret})
+  return ret
 }
 async function participantToObject(client) {
   if (!proto) proto = await setup()
@@ -570,17 +575,15 @@ async function participantToObject(client) {
   await baseClientToProto(client)).finish())
   var master64
   if (client.masterClient) {
-    master64 = naclUtil.encodeBase64(proto.client.SavedClient.
+    master64 = naclUtil.encodeBase64(proto.client.SavedMasterClient.
       encode(await masterClientToProto(client.masterClient)).finish())
   }
   const ret = {client64, master64}
   return ret
 }
 async function objectToParticipant(object) {
-  console.log("objectToParticipant 0", {object})
   if (!proto) proto = await setup()
   const clientPb = proto.client.SavedClient.decode(naclUtil.decodeBase64(object.client64))
-  console.log("objectToParticipant 0.5", {clientPb})
   const datagramSignPair = {
       secretKey: clientPb.datagramSignSecret,
       publicKey: clientPb.datagramSignPublic,
@@ -591,12 +594,12 @@ async function objectToParticipant(object) {
   }})
   client.hostname = clientPb.hostname
   client.datagramSignPair = datagramSignPair
-  console.log("objectToParticipant 1", {clientPb, client})
-  if (clientPb.roomInvitation) {
-    await client.joinRoom(clientPb.roomInvitation)
+  if (!object.master64) {
+    if (clientPb.roomInvitation) {
+      await client.joinRoom(clientPb.roomInvitation)
+    }
+    return client
   }
-  console.log("objectToParticipant 2", {clientPb, client})
-  if (!object.master64) return client
 
   const masterPb = proto.client.SavedMasterClient.decode(naclUtil.decodeBase64(object.master64))
   const base = masterPb.base
@@ -617,7 +620,9 @@ async function objectToParticipant(object) {
   await master.init()
   await master.subscribeToChannel(master.dmChannelId)
   client.masterClient = master
-  console.log("objectToParticipant 3", {clientPb, masterPb, client})
+  if (clientPb.roomInvitation) {
+    await client.joinRoom(clientPb.roomInvitation)
+  }
   return client
 }
 

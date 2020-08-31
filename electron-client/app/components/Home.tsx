@@ -111,7 +111,6 @@ class JoinDialog extends React.Component {
       handleError(`Couldn't load saved state: ${err}`)
       ids = {}
     }
-    console.log("loaded ids", ids)
     var tries = 0
     var dropdownIds
     while (tries < 2) {
@@ -189,7 +188,6 @@ class JoinDialog extends React.Component {
   }
 
   async joinRoom(invitationCode, identity) {
-    console.log("joinRoom", {invitationCode, identity})
     try {
       const options = {
         invitationCode,
@@ -410,7 +408,6 @@ class RoomList extends React.Component {
           isNew={isNew}
           selected={!isNew && isSelected}
           onClick={() => {
-            console.log(`clicked ${idx}`)
             this.setState({selectedIdx: idx})
             if (this.props.onSelect) {
               this.props.onSelect(parseInt((idx - 1) / 2))
@@ -676,8 +673,6 @@ class ChatView extends React.Component {
   }
 
   async onSend(body) {
-    console.log("onSend", {id: this.id,
-      client: this.props.client.name()})
     try {
       await this.props.client.sendText(body) 
     } catch(err) {
@@ -746,7 +741,6 @@ class HomeWindow extends React.Component {
   }
 
   onJoinRoom(client) {
-    console.log("onJoinRoom", {clients: this.state.clients, client})
     this.state.clients.unshift(client);
     (async function() {
       try {
@@ -761,18 +755,15 @@ class HomeWindow extends React.Component {
 
     // TODO: optimize
     client.pubsub.sub("receivedText", function(e) {
-      console.log("receivedText")
       client.messages.push(e)
       this.setState({update: !this.state.update})
     }.bind(this))
     client.pubsub.sub("userJoined", function(e) {
-      console.log("userJoined")
       setTimeout(function() {
         this.setState({update: !this.state.update})
       }.bind(this), 100)
     }.bind(this))
     client.pubsub.sub("selfJoined", function(e) {
-      console.log("selfJoined")
       setTimeout(function() {
         this.setState({update: !this.state.update})
       }.bind(this), 100)
