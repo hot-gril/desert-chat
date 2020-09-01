@@ -215,7 +215,9 @@ class JoinDialog extends React.Component {
       const client = await desert.makeParticipantClient(options)
       if (!options.invitationCode) {
         const masterClient = await desert.makeMasterClient(options.hostname)
-        options.invitationCode = await masterClient.createRoom()
+        options.invitationCode = await masterClient.createRoom({
+          displayName: this.state.roomName ? this.state.roomName : undefined, 
+        })
         client.masterClient = masterClient
         electron.clipboard.writeText(options.invitationCode)
         client.messages.push({
@@ -288,7 +290,7 @@ class JoinDialog extends React.Component {
                   <textarea style={{fontSize: 20, resize: "none", width: "100%", height: 30, color: "blue"}}
                     placeholder="By default, will be the participants' names"
                     value={this.state.roomName}
-                    onChange={this.handleChangeRoomName}/>
+                    onChange={this.handleChangeRoomName.bind(this)}/>
                 </div>
               </label>
               <br/>

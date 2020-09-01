@@ -208,15 +208,18 @@ class RoomMasterClient extends Client {
     this.roomKey = undefined
     this.roomChannelId = undefined
     this.invitationKey = undefined
+    this.roomProfile = undefined
   }
 
   hasRoom() { return this.roomChannelId != undefined }
 
-  async createRoom() {
+  async createRoom(roomProfile) {
     this.checkInitialized()
     if (this.hasRoom()) throw "already controlling a room"
     const roomChannelId = await this.createChannel(false)
     this.roomChannelId = roomChannelId
+    this.roomProfile = roomProfile ? this.proto.client.RoomProfile.create(roomProfile) : undefined,
+    console.log({roomProfile, this_roomProfile: this.roomProfile})
     this.invitationKey = nacl.randomBytes(16)
     const invitation = this.proto.client.RoomInvitation.create({
       dmChannelId: this.dmChannelId,
@@ -224,8 +227,8 @@ class RoomMasterClient extends Client {
       dmSigningKey: this.signPair.publicKey,
       dmEncryptionKey: this.encryptPair.publicKey,
       invitationKey: this.invitationKey,
-      // TODO add room profile
     })
+    this.invitationProto = invitation
     const invitationBytes = this.proto.client.RoomInvitation.encode(invitation).finish()
     this.pubsub.pub("selfJoined", {})
     return naclUtil.encodeBase64(invitationBytes)
@@ -249,8 +252,9 @@ class RoomMasterClient extends Client {
 
     const hello = datagram.hello
     if (hello) {
-      if (hello.invitationKey != this.invitationKey) {
+      if ("" + hello.invitationKey != "" + this.invitationKey) {
         debug(`${this.name()} ignoring hello with mismatched invitation key`, {expected: this.invitationKey, actual: hello.invitationKey})
+        return
       }
       this.roomKey = nacl.randomBytes(nacl.secretbox.keyLength)
       const newMasterHello = this.proto.client.Datagram.create({
@@ -258,6 +262,7 @@ class RoomMasterClient extends Client {
           roomKey: this.roomKey,
           roomChannelId: this.roomChannelId,
           participantHellos: Object.values(this.hellos),
+          roomProfile: this.roomProfile,
         })
       })
       const oldMasterHello = this.proto.client.Datagram.create({
@@ -265,8 +270,10 @@ class RoomMasterClient extends Client {
           roomKey: this.roomKey,
           roomChannelId: this.roomChannelId,
           participantHellos: [sd],
+          roomProfile: this.roomProfile,
         })
       })
+      console.log("masterhello roomProfile", this.roomProfile, {newMasterHello, oldMasterHello})
       await Promise.all([
         // All existing participants' hellos go to the new participant.
         this.sendC2C({channelId: hello.dmChannelId, hostname: hello.dmHostname,
@@ -443,6 +450,7 @@ class RoomParticipantClient extends Client {
     this.roomInvitation = invitationProto
     this.roomMasterPubSigningKey = Buffer.from(invitationProto.dmSigningKey)
     await this.init()
+    this.hello.invitationKey = this.invitationProto.invitationKey
     const datagram = this.proto.client.Datagram.create({
       hello: this.hello,
     })
@@ -557,6 +565,7 @@ async function masterClientToProto(client) {
       roomKey: client.roomKey,
       roomChannelId: client.roomChannelId,
       participantHellos: Object.values(client.hellos),
+      roomProfile: client.roomProfile,
     }),
     dmChannelId: client.dmChannelId,
     dmSignSecret: client.signPair.secretKey,
@@ -613,7 +622,8 @@ async function objectToParticipant(object) {
   }
   master.roomChannelId = masterPb.masterHello.roomChannelId
   master.roomKey = masterPb.masterHello.roomKey
-  master.invitationKey = masterPb.masterHello.invitationKey
+  master.invitationKey = base.roomInvitation.invitationKey
+  master.roomProfile = masterPb.masterHello.roomProfile
   await master.init()
   await master.subscribeToChannel(master.dmChannelId)
   client.masterClient = master
