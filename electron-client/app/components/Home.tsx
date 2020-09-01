@@ -83,6 +83,7 @@ class JoinDialog extends React.Component {
       username: "",
       hostname: "desert-chat-dev.herokuapp.com:80",
       ids: {},
+      idsArray: [],
       dropdownIds: [],
       selectedIdentity: null,
       mode: "",
@@ -99,23 +100,26 @@ class JoinDialog extends React.Component {
 
   componentDidMount() {
     var ids = {}
+    var idsArray = []
     try {
-      ids = global.store.get(kStoreIds) || {}
-      for (let id of Object.values(ids)) {
+      idsArray = global.store.get(kStoreIds) || []
+      for (let id of idsArray) {
         id.datagramSignPair = {
           publicKey: new Uint8Array(id.datagramSignPair.publicKey),
           secretKey: new Uint8Array(id.datagramSignPair.secretKey),
         }
+        ids[desert.helloId(id)] = id
       }
     } catch(err) {
       handleError(`Couldn't load saved state: ${err}`)
       ids = {}
+      idsArray = []
     }
     var tries = 0
     var dropdownIds
     while (tries < 2) {
       try {
-        dropdownIds = Object.values(ids).map(function(id) {
+        dropdownIds = idsArray.map(function(id) {
           return {
             value: desert.helloId(id),
             label: common.userName(undefined, id),
@@ -125,10 +129,11 @@ class JoinDialog extends React.Component {
       } catch(err) {
         handleError(`Couldn't load saved state: ${err}`)
         ids = {}
+        idsArray = []
         tries++
       }
     }
-    this.setState({ids, dropdownIds})
+    this.setState({ids, idsArray, dropdownIds})
   }
 
   handleError(e) {
@@ -166,17 +171,19 @@ class JoinDialog extends React.Component {
     }
     if (username) {
       const ids = this.state.ids
+      const idsArray = this.state.idsArray
       id = desert.makeIdentity()
       id.displayName = this.state.username
       ids[desert.helloId(id)] = id
+      idsArray.unshift(id)
       const dropdownIds = this.state.dropdownIds
       dropdownIds.unshift({value: desert.helloId(id), label: common.userName(undefined, id)})
       try {
-        global.store.set(kStoreIds, ids)
+        global.store.set(kStoreIds, idsArray)
       } catch(err) {
         common.handleError(`Failed to save: ${err}`)
       }
-      this.setState({ids, dropdownIds})
+      this.setState({ids, idsArray, dropdownIds})
     } else {
       id = this.state.ids[this.state.selectedIdentity.value]
     }
@@ -733,7 +740,9 @@ class HomeWindow extends React.Component {
         var clients = global.store.get(kStoreClients) || []
         clients = await Promise.all(clients.map(desert.objectToParticipant))
         console.debug("loaded clients", clients)
-        this.setState({clients})
+        for (let client of clients) {
+          this.onJoinRoom(client)
+        }
       } catch(err) {
         common.handleError(`Failed to load rooms: ${err}`)
       }

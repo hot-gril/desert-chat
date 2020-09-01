@@ -437,7 +437,6 @@ class RoomParticipantClient extends Client {
       const invitationBytes = naclUtil.decodeBase64(invitationCode)
       invitationProto = this.proto.client.RoomInvitation.decode(invitationBytes)
     }
-    console.log("joinRoom 1", {invitationCode, invitationProto})
     this.invitationProto = invitationProto
     this.hostname = invitationProto.dmHostname
     this.ws = await newSocket(this.hostname)
@@ -447,7 +446,6 @@ class RoomParticipantClient extends Client {
     const datagram = this.proto.client.Datagram.create({
       hello: this.hello,
     })
-    console.log("joinRoom 2", {self: this})
     await this.sendC2C({channelId: invitationProto.dmChannelId,
       hostname: invitationProto.dmHostname,
       encryptionKey: invitationProto.dmEncryptionKey, datagram,
@@ -566,7 +564,6 @@ async function masterClientToProto(client) {
     dmEncryptSecret: client.encryptPair.secretKey,
     dmEncryptPublic: client.encryptPair.publicKey,
   })
-  console.log("masterClientToProto", {client, ret})
   return ret
 }
 async function participantToObject(client) {
