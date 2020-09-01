@@ -807,7 +807,7 @@ class HomeWindow extends React.Component {
       <div style={{display: "flex", width: "100%", height: "100%",
         fontFamily: "monospace", 
       }}>
-        <div style={{flex: 1, backgroundColor: common.c.offBlack}}>
+        <div style={{width: 120, backgroundColor: common.c.offBlack}}>
           <RoomList
             clients={this.state.clients}
             onSelect={(idx) => this.setState({selectedIdx: idx})}
