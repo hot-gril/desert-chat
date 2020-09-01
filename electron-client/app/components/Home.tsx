@@ -82,6 +82,7 @@ class JoinDialog extends React.Component {
       invitationCode: "",
       username: "",
       hostname: "desert-chat-dev.herokuapp.com:80",
+      roomName: "",
       ids: {},
       idsArray: [],
       dropdownIds: [],
@@ -150,6 +151,10 @@ class JoinDialog extends React.Component {
 
   handleChangeUsername(event) {
     this.setState({username: event.target.value})
+  }
+
+  handleChangeRoomName(event) {
+    this.setState({roomName: event.target.value})
   }
 
   handleSubmit(event) {
@@ -278,7 +283,17 @@ class JoinDialog extends React.Component {
               )}
               <br/>
               <label>
-                {"2. Choose an identity:"}
+                {"2. Optionally pick a room name:"}
+                <div style={{display: "flex"}}>
+                  <textarea style={{fontSize: 20, resize: "none", width: "100%", height: 30, color: "blue"}}
+                    placeholder="By default, will be the participants' names"
+                    value={this.state.roomName}
+                    onChange={this.handleChangeRoomName}/>
+                </div>
+              </label>
+              <br/>
+              <label>
+                {"3. Choose an identity:"}
                 <Dropdown options={[{value: JoinDialog.kNewId, label: "Create new..."}].concat(this.state.dropdownIds)}
                   onChange={this.onSelectIdentity}
                   value={this.state.selectedIdentity}
