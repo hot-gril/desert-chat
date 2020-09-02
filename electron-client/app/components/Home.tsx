@@ -566,7 +566,7 @@ class MessageList extends React.Component {
               whiteSpace: "normal",
           }}>
             <span style={messageStyle}>
-              <div dangerouslySetInnerHTML={{__html: left + msg.text.body}}/>
+              {left + msg.text.body}
             </span>
           </span>
         </div>
@@ -580,6 +580,7 @@ class MessageList extends React.Component {
         ref={el => this.scrollView = el}
         style={{
           overflowY: "scroll",
+            overflowX: "hidden",
             height: "100%",
             width: "100%",
             color: common.c.text,
