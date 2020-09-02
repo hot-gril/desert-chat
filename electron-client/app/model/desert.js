@@ -447,7 +447,6 @@ class RoomParticipantClient extends Client {
     this.invitationProto = invitationProto
     this.hostname = invitationProto.dmHostname
     this.ws = await newSocket(this.hostname)
-    this.roomInvitation = invitationProto
     this.roomMasterPubSigningKey = Buffer.from(invitationProto.dmSigningKey)
     await this.init()
     this.hello.invitationKey = this.invitationProto.invitationKey
@@ -594,20 +593,21 @@ async function objectToParticipant(object) {
       secretKey: clientPb.datagramSignSecret,
       publicKey: clientPb.datagramSignPublic,
   }
+  console.debug("Loading participant...", clientPb)
   const client = await makeParticipantClient({identity: {
     displayName: clientPb.userProfile.displayName,
     datagramSignPair,
   }})
   client.hostname = clientPb.hostname
   client.datagramSignPair = datagramSignPair
+  client.invitationProto = clientPb.roomInvitation
   if (!object.master64) {
-    if (clientPb.roomInvitation) {
-      await client.joinRoom(clientPb.roomInvitation)
-    }
+    console.debug("Loaded participant", {proto: clientPb, client})
     return client
   }
 
   const masterPb = proto.client.SavedMasterClient.decode(naclUtil.decodeBase64(object.master64))
+  console.debug("Loading master+participant...", {clientPb, masterPb})
   const base = masterPb.base
   const master = new RoomMasterClient(proto,
     await newSocket(base.hostname), base.hostname)
@@ -622,14 +622,13 @@ async function objectToParticipant(object) {
   }
   master.roomChannelId = masterPb.masterHello.roomChannelId
   master.roomKey = masterPb.masterHello.roomKey
+  master.invitationProto = base.roomInvitation
   master.invitationKey = base.roomInvitation.invitationKey
   master.roomProfile = masterPb.masterHello.roomProfile
   await master.init()
   await master.subscribeToChannel(master.dmChannelId)
   client.masterClient = master
-  if (clientPb.roomInvitation) {
-    await client.joinRoom(clientPb.roomInvitation)
-  }
+  console.debug("Loaded master+participant", {proto: clientPb, client, masterPb})
   return client
 }
 

@@ -37,7 +37,8 @@ class RoomButton extends React.Component {
         className={this.state.fade ? 'fade' : ''}
         onClick={this.onClick.bind(this)}
         style={{
-          height: 60,
+          height: 70,
+          width: 70,
             marginLeft: 5, marginRight: 5,
             padding: 10,
             userSelect: "none",
@@ -45,11 +46,14 @@ class RoomButton extends React.Component {
             backgroundColor: isNew ? common.color.specialWine : common.color.wine,
             borderColor: common.color.white,
             borderStyle: "solid",
-            borderWidth: 1,
-            //            borderRadius: 20,
+            borderWidth: 2,
+            borderRadius: 50,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
             textAlign: "center",
             fontSize: isNew ? 50 : undefined,
             fontWeight: isNew ? "bold" : undefined,
@@ -284,6 +288,7 @@ class JoinDialog extends React.Component {
                 </label>
               )}
               <br/>
+              {this.state.mode == "create" && ( 
               <label>
                 {"2. Optionally pick a room name:"}
                 <div style={{display: "flex"}}>
@@ -292,10 +297,11 @@ class JoinDialog extends React.Component {
                     value={this.state.roomName}
                     onChange={this.handleChangeRoomName.bind(this)}/>
                 </div>
+                  <br/>
               </label>
-              <br/>
+              )}
               <label>
-                {"3. Choose an identity:"}
+                {(this.state.mode == "create" ? 3 : 2) + ". Choose an identity:"}
                 <Dropdown options={[{value: JoinDialog.kNewId, label: "Create new..."}].concat(this.state.dropdownIds)}
                   onChange={this.onSelectIdentity}
                   value={this.state.selectedIdentity}
@@ -530,10 +536,8 @@ class MessageList extends React.Component {
     var textAlign
     var justifyContent
     var left = ""
-    var right = ""
     if (isClient) {
-      left = "~~ "
-      right = " ~~"
+      left = ""
       messageStyle = {
         color: common.color.specialText,
         fontStyle: "italic",
@@ -562,7 +566,7 @@ class MessageList extends React.Component {
               whiteSpace: "normal",
           }}>
             <span style={messageStyle}>
-              {left + msg.text.body + right}
+              <div dangerouslySetInnerHTML={{__html: left + msg.text.body}}/>
             </span>
           </span>
         </div>
@@ -757,7 +761,11 @@ class HomeWindow extends React.Component {
         var clients = global.store.get(kStoreClients) || []
         clients = await Promise.all(clients.map(desert.objectToParticipant))
         console.debug("loaded clients", clients)
+        clients.reverse()
         for (let client of clients) {
+          if (client.invitationProto) {
+            await client.joinRoom(client.invitationProto)
+          }
           this.onJoinRoom(client)
         }
       } catch(err) {
