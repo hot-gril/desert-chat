@@ -11,6 +11,8 @@ import FlatList from 'flatlist-react';
 const Split = require('react-split')
 import Dropdown from 'react-dropdown';
 import 'react-dropdown/style.css';
+import Loader from 'react-loader-spinner'
+import "react-loader-spinner/dist/loader/css/react-spinner-loader.css"
 
 const kStoreIds = "identities"
 const kStoreClients = "clients"
@@ -101,6 +103,7 @@ class JoinDialog extends React.Component {
       dropdownIds: [],
       selectedIdentity: null,
       mode: "",
+      loading: false,
     }
 
     this.handleChangeCode = this.handleChangeCode.bind(this)
@@ -213,6 +216,7 @@ class JoinDialog extends React.Component {
   }
 
   async joinRoom(invitationCode, identity) {
+    this.setState({loading: true})
     try {
       const options = {
         invitationCode,
@@ -246,6 +250,7 @@ class JoinDialog extends React.Component {
     } catch(e) {
       common.handleError(e)
     }
+    this.setState({loading: false})
   }
 
   render() {
@@ -328,9 +333,28 @@ class JoinDialog extends React.Component {
               </label>
             )}
             <br/>
+              {this.state.mode == "create" && ( 
+              <label>
+                <div style={{display: "flex"}}>
+                  {"You will own this room, and others may only join while you're in it."}
+                </div>
+                <br/>
+              </label>
+              )}
             <input style={{fontColor: this.state.invitationCode ? "green" : "grey", fontWeight: "bold", fontSize: 24, width: 100, height: 50, border: "none"}} type="submit" value={"Go"} disabled={this.state.mode == "join" && !this.state.invitationCode} />
           </form>)}
         </div>
+      {this.state.loading && (
+        <div style={{display: "flex", alignItems: "center",
+            justifyContent: "center"}}>
+        <Loader
+           type="TailSpin"
+           color={common.color.white}
+           height={100}
+           width={100}
+         />
+       </div>
+      )}
       </div>
     );
   }
@@ -718,6 +742,23 @@ class ChatView extends React.Component {
     }
     this.messageList = undefined
     this.id = parseInt(Math.random() * 1000000)
+    this.props.eventRope.subs.push(this.handleEvent.bind(this))
+  }
+
+  refreshMessages() {
+    this.setState({update: !this.state.update})
+    if (this.messageList) {
+      setTimeout(() => {
+        this.messageList.scrollToBottom()
+      })
+    }
+  }
+
+  handleEvent(name, event) {
+    if (event.client.helloId() != this.props.client.helloId()) return
+    if (name == "receivedText") {
+      this.refreshMessages()
+    }
   }
 
   async onSend(body) {
@@ -730,12 +771,7 @@ class ChatView extends React.Component {
       senderHello: MessageList.kSelfSender,
       text: {body},
     })
-    this.setState({update: !this.state.update})
-    if (this.messageList) {
-      setTimeout(() => {
-        this.messageList.scrollToBottom()
-      })
-    }
+    this.refreshMessages()
   }
 
   render() {
@@ -772,25 +808,37 @@ class HomeWindow extends React.Component {
       selectedIdx: undefined,
       clients: [],
       update: false,
+      loading: false,
+    }
+    this.eventRope = {subs: []}
+  }
+
+  pub(name, event) {
+    for (let sub of this.eventRope.subs) {
+      sub(name, event)
     }
   }
 
   componentDidMount() {
     (async function() {
+      this.setState({loading: true})
       try {
         var clients = global.store.get(kStoreClients) || []
         clients = await Promise.all(clients.map(desert.objectToParticipant))
         console.debug("loaded clients", clients)
         clients.reverse()
+        var i = 0
         for (let client of clients) {
           if (client.invitationProto) {
             await client.joinRoom(client.invitationProto)
           }
-          this.onJoinRoom(client)
+          this.onJoinRoom(client, i == clients.length - 1)
+          i++
         }
       } catch(err) {
         common.handleError(`Failed to load rooms: ${err}`)
       }
+      this.setState({loading: false})
     }.bind(this))()
   }
 
@@ -805,21 +853,24 @@ class HomeWindow extends React.Component {
     }
   }
 
-  onJoinRoom(client) {
+  onJoinRoom(client, save=true) {
     this.state.clients.unshift(client);
-    this.saveClients()
+    if (save) {
+      this.saveClients()
+    }
 
-    // TODO: optimize
     client.pubsub.sub("receivedText", function(e) {
       client.messages.push(e)
-      this.setState({update: !this.state.update})
+      this.pub("receivedText", {client, e})
     }.bind(this))
     client.pubsub.sub("userJoined", function(e) {
+      this.pub("userJoined", {client, e})
       setTimeout(function() {
         this.setState({update: !this.state.update})
       }.bind(this), 100)
     }.bind(this))
     client.pubsub.sub("selfJoined", function(e) {
+      this.pub("selfJoined", {client, e})
       setTimeout(function() {
         this.setState({update: !this.state.update})
       }.bind(this), 100)
@@ -833,7 +884,6 @@ class HomeWindow extends React.Component {
   }
 
   onDelete(idx) {
-    console.debug("onDelete", {idx, selectedIdx: this.state.selectedIdx})
     const client = this.state.clients[idx]
     if (confirm(`Are you sure you want to leave the room named "${getRoomName(client)}"?`)) {
       if (idx == this.state.selectedIdx) this.setState({selectedIdx: undefined})
@@ -848,6 +898,17 @@ class HomeWindow extends React.Component {
       <div style={{display: "flex", width: "100%", height: "100%",
         fontFamily: "monospace", 
       }}>
+        {this.state.loading && (
+          <div style={{display: "flex", alignItems: "center",
+              justifyContent: "center", position: "absolute",
+              width: "50%", height: "50%", left: "25%", top: "25%"}}>
+          <Loader
+             type="TailSpin"
+             color={common.color.white}
+             width="100%" height="100%"
+           />
+         </div>
+        )}
         <div style={{width: 120, backgroundColor: common.c.offBlack}}>
           <RoomList
             clients={this.state.clients}
@@ -861,6 +922,7 @@ class HomeWindow extends React.Component {
         </div>
         <div style={{flex: 8}}>
           {this.state.selectedIdx !== undefined && (<ChatView
+            eventRope={this.eventRope}
             client={this.state.clients[this.state.selectedIdx]}
           />)}
           {this.state.selectedIdx === undefined && (

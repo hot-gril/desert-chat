@@ -4,7 +4,7 @@ const naclUtil = require('tweetnacl-util');
 const {PubSub} = require('./pubsub')
 
 
-const DEBUG = true//false
+const DEBUG = false
 function debug() {
   if (!DEBUG) return
   console.debug(...arguments)
@@ -219,7 +219,6 @@ class RoomMasterClient extends Client {
     const roomChannelId = await this.createChannel(false)
     this.roomChannelId = roomChannelId
     this.roomProfile = roomProfile ? this.proto.client.RoomProfile.create(roomProfile) : undefined,
-    console.log({roomProfile, this_roomProfile: this.roomProfile})
     this.invitationKey = nacl.randomBytes(16)
     const invitation = this.proto.client.RoomInvitation.create({
       dmChannelId: this.dmChannelId,
@@ -273,7 +272,6 @@ class RoomMasterClient extends Client {
           roomProfile: this.roomProfile,
         })
       })
-      console.log("masterhello roomProfile", this.roomProfile, {newMasterHello, oldMasterHello})
       await Promise.all([
         // All existing participants' hellos go to the new participant.
         this.sendC2C({channelId: hello.dmChannelId, hostname: hello.dmHostname,
