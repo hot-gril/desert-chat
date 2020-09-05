@@ -401,6 +401,30 @@ class ParticipantList extends React.Component {
   }
 }
 
+function getRoomName(client) {
+  var roomName = (client.roomProfile || {}).displayName
+  if (!roomName) {
+    const maxNames = 3
+    const others = Object.values(client.hellos)
+      .filter(h => desert.helloId(h) !=
+        desert.helloId(client.identity))
+    others.sort(function(a, b) {
+      const aName = common.userName(a)
+      const bName = common.userName(b)
+      if (aName == bName) return 0
+      return aName < bName ? -1 : 1
+    })
+    others.unshift(client.identity)
+    var nameList = others.slice(0, maxNames).map(common.userName).join(", ")
+    if (others.length > maxNames) {
+      roomName = nameList + ` + ${others.length - maxNames}`
+    } else {
+      roomName = nameList
+    }
+  }
+  return roomName
+}
+
 class RoomList extends React.Component {
   constructor(props) {
     super(props);
@@ -418,26 +442,7 @@ class RoomList extends React.Component {
     if (isNew) {
       roomName = "+"
     } else {
-      roomName = (client.roomProfile || {}).displayName
-      if (!roomName) {
-        const maxNames = 3
-        const others = Object.values(client.hellos)
-          .filter(h => desert.helloId(h) !=
-            desert.helloId(client.identity))
-        others.sort(function(a, b) {
-          const aName = common.userName(a)
-          const bName = common.userName(b)
-          if (aName == bName) return 0
-          return aName < bName ? -1 : 1
-        })
-        others.unshift(client.identity)
-        var nameList = others.slice(0, maxNames).map(common.userName).join(", ")
-        if (others.length > maxNames) {
-          roomName = nameList + ` + ${others.length - maxNames}`
-        } else {
-          roomName = nameList
-        }
-      }
+      roomName = getRoomName(client)
     }
 
     const isSelected = idx == this.state.selectedIdx
@@ -826,7 +831,10 @@ class HomeWindow extends React.Component {
   }
 
   onDelete(idx) {
-    console.log("onDelete", {idx})
+    const client = this.state.clientsArray[idx]
+    if (confirm(`Are you sure you want to leave the rooom: ${getRoomName(client)}`)) {
+      console.log("confirmed deletion")
+    }
   }
 
   render() {
@@ -838,7 +846,7 @@ class HomeWindow extends React.Component {
           <RoomList
             clients={this.state.clients}
             onSelect={(idx) => this.setState({selectedIdx: idx})}
-            onDelete={(idx) => this.onDelete(idx)}
+            onDelete={function(idx) { this.onDelete(idx) }.bind(this)}
             onPressNew={(idx) => this.setState({selectedIdx: undefined})}
           />
         </div>
