@@ -831,9 +831,12 @@ class HomeWindow extends React.Component {
   }
 
   onDelete(idx) {
-    const client = this.state.clientsArray[idx]
-    if (confirm(`Are you sure you want to leave the rooom: ${getRoomName(client)}`)) {
-      console.log("confirmed deletion")
+    console.debug("onDelete", {idx, selectedIdx: this.state.selectedIdx})
+    const client = this.state.clients[idx]
+    if (confirm(`Are you sure you want to leave the room named "${getRoomName(client)}"?`)) {
+      if (idx == this.state.selectedIdx) this.setState({selectedIdx: undefined})
+      this.state.clients.splice(idx, 1)
+      this.setState({clients: this.state.clients})
     }
   }
 
