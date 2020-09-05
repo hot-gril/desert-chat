@@ -16,6 +16,7 @@ import "react-loader-spinner/dist/loader/css/react-spinner-loader.css"
 
 const kStoreIds = "identities"
 const kStoreClients = "clients"
+const kTimeoutMs = 5000
 
 class RoomButton extends React.Component {
   constructor(props) {
@@ -237,10 +238,6 @@ class JoinDialog extends React.Component {
         })
         client.masterClient = masterClient
         electron.clipboard.writeText(options.invitationCode)
-        client.messages.push({
-          senderHello: MessageList.kClientSender,
-              text: {body: `Copied invitation code to clipboard: ${options.invitationCode}`},
-        })
       }
       await client.joinRoom(options.invitationCode)
       if (this.props.onJoinRoom) {
@@ -585,7 +582,7 @@ class MessageList extends React.Component {
         color: common.color.specialText,
         fontStyle: "italic",
       }
-      justifyContent = "flex-start"
+      justifyContent = "center"
       textAlign = "center"
     } else if (isSelf) {
       messageStyle = {
@@ -597,6 +594,13 @@ class MessageList extends React.Component {
       left = common.userName(msg.senderHello) + ": "
       justifyContent = "flex-start"
       textAlign = "left"
+    }
+    if (msg.sent !== undefined) {
+      if (msg.failed) {
+        messageStyle.color = common.color.bad
+      } else if (!msg.sent) {
+        messageStyle.fontStyle = "italic"
+      }
     }
     return (
       <li key={idx}>
@@ -739,6 +743,7 @@ class ChatView extends React.Component {
     super(props);
     this.state = {
       update: false,
+      lastNotifiedOfFailedMessages: undefined,
     }
     this.messageList = undefined
     this.id = parseInt(Math.random() * 1000000)
@@ -761,16 +766,52 @@ class ChatView extends React.Component {
     }
   }
 
+  sendClientMessage(body) {
+    const msg = {
+      senderHello: MessageList.kClientSender, text: {body},
+    }
+    this.props.client.messages.push(msg)
+    this.refreshMessages()
+  }
+
+  notifyOfFailedMessages() {
+    if (this.state.lastNotifiedOfFailedMessages
+      || new Date() - this.state.lastNotifiedOfFailedMessages < 30000) {
+      return
+    }
+    this.sendClientMessage(
+      "Some messages have failed to send, but they might succeed later. Check your network connection.")
+    this.setState({lastNotifiedOfFailedMessages: new Date()})
+  }
+
   async onSend(body) {
+    const msg = {
+      senderHello: MessageList.kSelfSender,
+      text: {body},
+      failed: false,
+    }
+    setTimeout(function() {
+      if (!msg.sent) msg.sent = false
+      this.refreshMessages()
+    }.bind(this), 500)
+    this.props.client.messages.push(msg)
+    this.refreshMessages()
+    setTimeout(function() {
+      if (!msg.sent) {
+        msg.failed = true
+        this.notifyOfFailedMessages()
+      }
+      this.refreshMessages()
+    }.bind(this), kTimeoutMs)
     try {
       await this.props.client.sendText(body) 
     } catch(err) {
       common.handleError(err)
+      msg.failed = true
+      this.notifyOfFailedMessages()
     }
-    this.props.client.messages.push({
-      senderHello: MessageList.kSelfSender,
-      text: {body},
-    })
+    msg.sent = true
+    msg.failed = false
     this.refreshMessages()
   }
 
@@ -853,11 +894,27 @@ class HomeWindow extends React.Component {
     }
   }
 
+  sendClientMessage(client, body) {
+    const msg = {
+      senderHello: MessageList.kClientSender, text: {body},
+    }
+    client.messages.push(msg)
+    this.pub("receivedText", {client, e: msg})
+  }
+
   onJoinRoom(client, save=true) {
     this.state.clients.unshift(client);
     if (save) {
       this.saveClients()
     }
+
+    this.sendClientMessage(client, "Joining room...")
+    setTimeout(function() {
+      if (!client.isInRoom()) {
+        this.sendClientMessage(client,
+          "This is taking a while. Maybe the room owner is offline.")
+      }
+    }.bind(this), kTimeoutMs)
 
     client.pubsub.sub("receivedText", function(e) {
       client.messages.push(e)
@@ -871,6 +928,11 @@ class HomeWindow extends React.Component {
     }.bind(this))
     client.pubsub.sub("selfJoined", function(e) {
       this.pub("selfJoined", {client, e})
+      this.sendClientMessage(client, "You're in!")
+      if (client.masterClient) {
+        this.sendClientMessage(client,
+          `Copied invitation code to clipboard: ${client.masterClient.invitationCode}`)
+      }
       setTimeout(function() {
         this.setState({update: !this.state.update})
       }.bind(this), 100)

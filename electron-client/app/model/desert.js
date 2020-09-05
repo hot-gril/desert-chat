@@ -230,7 +230,8 @@ class RoomMasterClient extends Client {
     this.invitationProto = invitation
     const invitationBytes = this.proto.client.RoomInvitation.encode(invitation).finish()
     this.pubsub.pub("selfJoined", {})
-    return naclUtil.encodeBase64(invitationBytes)
+    this.invitationCode = naclUtil.encodeBase64(invitationBytes)
+    return this.invitationCode
   }
 
   name() {
@@ -621,6 +622,8 @@ async function objectToParticipant(object) {
   master.roomChannelId = masterPb.masterHello.roomChannelId
   master.roomKey = masterPb.masterHello.roomKey
   master.invitationProto = base.roomInvitation
+  const invitationBytes = proto.client.RoomInvitation.encode(master.invitationProto).finish()
+  master.invitationCode = naclUtil.encodeBase64(invitationBytes)
   master.invitationKey = base.roomInvitation.invitationKey
   master.roomProfile = masterPb.masterHello.roomProfile
   await master.init()
