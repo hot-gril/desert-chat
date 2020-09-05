@@ -794,18 +794,20 @@ class HomeWindow extends React.Component {
     }.bind(this))()
   }
 
+  async saveClients() {
+    try {
+      const clients = await Promise.all(
+        this.state.clients.map(desert.participantToObject)
+      )
+      global.store.set(kStoreClients, clients)
+    } catch(err) {
+      common.handleError(`Failed to save rooms: ${err}`)
+    }
+  }
+
   onJoinRoom(client) {
     this.state.clients.unshift(client);
-    (async function() {
-      try {
-        const clients = await Promise.all(
-          this.state.clients.map(desert.participantToObject)
-        )
-        global.store.set(kStoreClients, clients)
-      } catch(err) {
-        common.handleError(`Failed to save rooms: ${err}`)
-      }
-    }.bind(this))()
+    this.saveClients()
 
     // TODO: optimize
     client.pubsub.sub("receivedText", function(e) {
@@ -837,6 +839,7 @@ class HomeWindow extends React.Component {
       if (idx == this.state.selectedIdx) this.setState({selectedIdx: undefined})
       this.state.clients.splice(idx, 1)
       this.setState({clients: this.state.clients})
+      this.saveClients()
     }
   }
 
@@ -848,7 +851,10 @@ class HomeWindow extends React.Component {
         <div style={{width: 120, backgroundColor: common.c.offBlack}}>
           <RoomList
             clients={this.state.clients}
-            onSelect={(idx) => this.setState({selectedIdx: idx})}
+            onSelect={(idx) => {
+              if (idx >= this.state.clients.length) { idx = undefined }
+              this.setState({selectedIdx: idx})}
+              }
             onDelete={function(idx) { this.onDelete(idx) }.bind(this)}
             onPressNew={(idx) => this.setState({selectedIdx: undefined})}
           />
