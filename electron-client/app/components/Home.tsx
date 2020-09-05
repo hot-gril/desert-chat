@@ -27,6 +27,10 @@ class RoomButton extends React.Component {
     this.props.onClick()
   }
 
+  onDelete() {
+    this.props.onDelete()
+  }
+
   render() {
     const isNew = this.props.isNew
     return (
@@ -49,6 +53,7 @@ class RoomButton extends React.Component {
             borderWidth: 2,
             borderRadius: 50,
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
             whiteSpace: "nowrap",
@@ -59,6 +64,10 @@ class RoomButton extends React.Component {
             fontWeight: isNew ? "bold" : undefined,
         }}>
           {this.props.children}
+          {this.state.hover && !this.props.isNew && (
+          <div style={{backgroundColor: common.color.white, fontFamily: "sans-serif", color: common.color.black}}
+            onClick={this.onDelete.bind(this)} 
+          >{"X"}</div>) }
         </div>
     )
   }
@@ -443,6 +452,11 @@ class RoomList extends React.Component {
               this.props.onSelect(parseInt((idx - 1) / 2))
             }
           }}
+          onDelete={() => {
+            if (this.props.onDelete) {
+              this.props.onDelete(parseInt((idx - 1) / 2))
+            }
+          }}
         >
           {roomName}
         </RoomButton>
@@ -811,6 +825,10 @@ class HomeWindow extends React.Component {
     })
   }
 
+  onDelete(idx) {
+    console.log("onDelete", {idx})
+  }
+
   render() {
     return (
       <div style={{display: "flex", width: "100%", height: "100%",
@@ -820,6 +838,7 @@ class HomeWindow extends React.Component {
           <RoomList
             clients={this.state.clients}
             onSelect={(idx) => this.setState({selectedIdx: idx})}
+            onDelete={(idx) => this.onDelete(idx)}
             onPressNew={(idx) => this.setState({selectedIdx: undefined})}
           />
         </div>
