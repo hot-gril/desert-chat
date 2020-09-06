@@ -143,6 +143,7 @@ class Client {
     const dmChannelId = await this.createChannel()
     if (this.isInitialized()) return  // checks again in case of concurrent initialization
     this.dmChannelId = dmChannelId
+    this.pingLoop()
     console.info("Finished initializing client " + helloId(this.identity))
   }
 
@@ -171,6 +172,21 @@ class Client {
       }.bind(this), timeout)
       this.ws.send(buffer)
     }.bind(this))
+  }
+
+  async ping() {
+    await this.request(this.proto.server.PingRequest.create({}))
+  }
+
+  async pingLoop() {
+    try {
+      this.ping()
+    } catch(err) {
+      console.log("Error during ping", err) 
+    }
+    setTimeout(function() {
+      this.pingLoop() 
+    }.bind(this), 1000 * 60)
   }
 
   async createChannel(subscribe=undefined) {
@@ -563,6 +579,8 @@ const setup = async function() {
       SubResponse: serverRoot.lookupType("desert.server.SubResponse"),
       UnsubRequest: serverRoot.lookupType("desert.server.UnsubRequest"),
       UnsubResponse: serverRoot.lookupType("desert.server.UnsubResponse"),
+      PingRequest: serverRoot.lookupType("desert.server.PingRequest"),
+      PingResponse: serverRoot.lookupType("desert.server.PingResponse"),
       Datagram: serverRoot.lookupType("desert.server.Datagram"),
     }
   }

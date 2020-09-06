@@ -6,7 +6,7 @@ const util = require("util");
 const DEBUG = process.env.DEBUG == "true"
 const debug = function() {
   if (!DEBUG) return
-  console.debug(arguments)
+  console.debug(...arguments)
 }
 
 class Pubsub {
