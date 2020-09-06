@@ -22,6 +22,7 @@ class AutoReconnectWebSocket {
     this.reset()
     this._onopen = undefined
     this._onmessage = undefined
+    this._lastReset = new Date()
   }
 
   send() {
@@ -39,6 +40,8 @@ class AutoReconnectWebSocket {
   }
 
   reset() {
+    if (new Date() - this._lastReset < 10000) return
+    this._lastReset = new Date()
     try {
       this.ws.close()
     } catch(err) {}
@@ -166,16 +169,23 @@ class Client {
       debug(`${this.name()} tx to server ${inspect(req)}`)
       setTimeout(function() {
         if (this.pendingRequests[req.id] !== undefined) {
+          this.pendingRequests[req.id] = undefined  // gives up
           this.ws.reset()
           //reject(`${timeout}ms timeout reached`)
         }
       }.bind(this), timeout)
-      this.ws.send(buffer)
+      try {
+        this.ws.send(buffer)
+      } catch(err) {
+        console.log("Error while sending on websocket", err)
+      }
     }.bind(this))
   }
 
   async ping() {
-    await this.request(this.proto.server.PingRequest.create({}))
+    await this.request(this.proto.server.C2sRequest.create({
+      ping: this.proto.server.PingRequest.create({})
+    }))
   }
 
   async pingLoop() {

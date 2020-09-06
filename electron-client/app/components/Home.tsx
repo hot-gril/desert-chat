@@ -899,6 +899,15 @@ class HomeWindow extends React.Component {
     this.pub("receivedText", {client, e: msg})
   }
 
+  joinRoomLoop(client, tries=1) {
+    client.joinRoom(client.invitationProto)
+    setTimeout(function() {
+      if (!client.isInRoom()) {
+        this.joinRoomLoop(client, tries + 1)
+      }
+    }.bind(this), kTimeoutMs * tries)
+  }
+
   onJoinRoom(client, save=true) {
     this.state.clients.unshift(client);
     if (save) {
@@ -909,7 +918,8 @@ class HomeWindow extends React.Component {
     setTimeout(function() {
       if (!client.isInRoom()) {
         this.sendClientMessage(client,
-          "This is taking a while. Maybe the room owner is offline.")
+          "This is taking a while. Maybe the room owner is offline. We'll keep trying...")
+        this.joinRoomLoop(client)
       }
     }.bind(this), kTimeoutMs)
 
