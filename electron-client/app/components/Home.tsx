@@ -1,14 +1,11 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import routes from '../constants/routes.json';
 import styles from './Home.css';
 const common = require("./common")
 const desert = require("../model/desert")
 const global = require("../model/global")
 const electron = require("electron")
-const BrowserWindow = electron.remote.BrowserWindow
 import FlatList from 'flatlist-react';
-const Split = require('react-split')
 import Dropdown from 'react-dropdown';
 import 'react-dropdown/style.css';
 import Loader from 'react-loader-spinner'
@@ -805,13 +802,13 @@ class ChatView extends React.Component {
     }.bind(this), kTimeoutMs)
     try {
       await this.props.client.sendText(body) 
+      msg.sent = true
+      msg.failed = false
     } catch(err) {
       common.handleError(err)
       msg.failed = true
       this.notifyOfFailedMessages()
     }
-    msg.sent = true
-    msg.failed = false
     this.refreshMessages()
   }
 

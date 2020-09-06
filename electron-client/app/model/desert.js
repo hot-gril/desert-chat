@@ -2,9 +2,10 @@ const protobuf = require("protobufjs");
 const nacl = require('tweetnacl');
 const naclUtil = require('tweetnacl-util');
 const {PubSub} = require('./pubsub')
+const util = require("util")
 
 
-const DEBUG = false
+const DEBUG = true
 function debug() {
   if (!DEBUG) return
   console.debug(...arguments)
@@ -14,9 +15,47 @@ const inspect = function(obj) {
   return JSON.stringify(obj)
 }
 
+class AutoReconnectWebSocket {
+  constructor(url) {
+    this.url = url
+    this.ws = undefined
+    this.reset()
+    this._onopen = undefined
+    this._onmessage = undefined
+  }
+
+  send() {
+    this.ws.send(...arguments)
+  }
+
+  set onopen(f) {
+    this.ws.onopen = f
+    this._onopen = f
+  }
+
+  set onmessage(f) {
+    this.ws.onmessage = f
+    this._onmessage = f
+  }
+
+  reset() {
+    try {
+      this.ws.close()
+    } catch(err) {}
+    console.info(`Opening connection to ${this.url}`)
+    const ws = new WebSocket(this.url);
+    ws.onopen = function() {
+      console.debug(`Opened connection to ${this.url}`)
+      if (this._onopen) this._onopen()
+    }.bind(this)
+    ws.onmessage = this._onmessage
+    this.ws = ws
+  }
+}
+
 function newSocket(hostname) {
   return new Promise(function(resolve, reject) {
-    const ws = new WebSocket(`ws://${hostname}`);
+    const ws = new AutoReconnectWebSocket(`ws://${hostname}`);
     ws.onopen = function() {
       console.info("Connected to server " + hostname)
       resolve(ws)
@@ -124,8 +163,13 @@ class Client {
       this.pendingRequests[req.id] = resolve
       const buffer = this.proto.server.C2sRequest.encode(req).finish()
       debug(`${this.name()} tx to server ${inspect(req)}`)
+      setTimeout(function() {
+        if (this.pendingRequests[req.id] !== undefined) {
+          this.ws.reset()
+          //reject(`${timeout}ms timeout reached`)
+        }
+      }.bind(this), timeout)
       this.ws.send(buffer)
-      setTimeout(reject, timeout)
     }.bind(this))
   }
 

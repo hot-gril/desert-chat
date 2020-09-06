@@ -122,6 +122,13 @@ const handleClient = async function(ws, proto) {
       })
       tx(response)
     }
+    else if (message.ping) {
+      const response = proto.C2sResponse.create({
+        id: message.id,
+        ping: proto.PingResponse.create({}),
+      })
+      tx(response)
+    }
   })
 }
 
@@ -140,6 +147,8 @@ const f = async function() {
     SubResponse: root.lookupType("desert.server.SubResponse"),
     UnsubRequest: root.lookupType("desert.server.UnsubRequest"),
     UnsubResponse: root.lookupType("desert.server.UnsubResponse"),
+    PingRequest: root.lookupType("desert.server.PingRequest"),
+    PingResponse: root.lookupType("desert.server.PingResponse"),
     Datagram: root.lookupType("desert.server.Datagram"),
   }
   debug("loaded proto")

@@ -23,6 +23,7 @@ userName = function(hello, identity) {
 }
 
 handleError = function(e) {
+  e = e || "unknown error"
   console.error(e, e.stack)
   alert(e)
 }

@@ -51,6 +51,10 @@ message UnsubRequest {
 
 message UnsubResponse {}
 
+message PingRequest {}
+
+message PingResponse {}
+
 message C2sRequest {
   int64 id = 1;
   oneof method {
@@ -58,6 +62,7 @@ message C2sRequest {
     CreateChannelRequest create_channel = 3; 
     SubRequest sub = 4; 
     UnsubRequest unsub = 5; 
+    PingRequest ping = 6; 
   }
 }
 
@@ -69,5 +74,6 @@ message C2sResponse {
     SubResponse sub = 4; 
     UnsubResponse unsub = 5; 
     Datagram incoming_datagram = 6;
+    PingResponse ping = 7;
   }
 }
