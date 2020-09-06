@@ -903,6 +903,8 @@ class HomeWindow extends React.Component {
     client.joinRoom(client.invitationProto)
     setTimeout(function() {
       if (!client.isInRoom()) {
+        this.sendClientMessage(client,
+          `Still haven't joined. Will retry in ${parseInt(kTimeoutMs * (tries + 1) / 1000)} seconds...`)
         this.joinRoomLoop(client, tries + 1)
       }
     }.bind(this), kTimeoutMs * tries)
