@@ -389,6 +389,18 @@ class RoomParticipantClient extends Client {
     this.hellos[helloId(this.hello)] = this.hello
   }
 
+  async invite(uuid, invitation) {
+    const userHello = this.hellos[uuid]
+    if (userHello === undefined) {
+      throw "user not found"
+    }
+    const datagram = this.proto.client.Datagram.create({invitation})
+    await this.sendC2C({channelId: userHello.dmChannelId,
+      hostname: userHello.dmHostname,
+      encryptionKey: userHello.dmEncryptionKey, datagram,
+      includeIdentity: true})
+  }
+
   isInRoom() {
     const ret = (this.roomKeys.length > 0) && this.roomChannelId
     return ret

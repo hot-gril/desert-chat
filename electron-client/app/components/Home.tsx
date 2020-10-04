@@ -1,7 +1,7 @@
 import React from 'react';
 import routes from '../constants/routes.json';
 import styles from './Home.css';
-const common = require("./common")
+import common from "./common"
 const desert = require("../model/desert")
 const global = require("../model/global")
 const electron = require("electron")
@@ -362,15 +362,26 @@ class ParticipantList extends React.Component {
     this.renderItem = this.renderItem.bind(this)
     this.renderSeparator = this.renderSeparator.bind(this)
     this.state = {
-      update: false
+      update: false,
+      menuX: undefined,
+      menuY: undefined,
     }
+  }
+
+  onClick(event) {
+    event.preventDefault()
+    event.stopPropagation()
+    console.log("onClick", event.clientX, event.clientY)
+    this.setState({menuX: event.clientX, menuY: event.clientY})
   }
 
   renderItem(userHello, idx) {
     const isSelf = desert.helloId(userHello) == desert.helloId(this.props.client.identity)
     return (
       <li key={idx} style={{color : isSelf ? common.color.selfText : undefined, fontWeight: isSelf ? "bold" : undefined}}>
-        {common.userName(userHello)}
+        <div onClick={this.onClick.bind(this)}>
+          {common.userName(userHello)}
+        </div>
       </li>
     )
   }
@@ -383,7 +394,20 @@ class ParticipantList extends React.Component {
 
   render() {
     return (
-      <div style={{color: common.c.text}}>
+      <div style={{color: common.c.text}} onClick={() => {
+        console.log("onClick outside")
+        this.setState({menuX: undefined, menuY: undefined}) 
+      }}>
+        <common.ContextMenu
+          xPos={this.state.menuX} yPos={this.state.menuY}
+          onMouseLeave={() => {this.setState({
+            menuX: undefined, menuY: undefined})}}
+            options={["Add contact"]}
+            onClick={(o) => {
+              this.setState({menuX: undefined, menuY: undefined})
+              console.log("selected", o)
+            }}
+          />
         <Title fontSize={20}>
           {"Users"}
         </Title>

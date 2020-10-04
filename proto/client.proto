@@ -65,8 +65,13 @@ message Video {
   bytes buffer = 1;
 }
 
-// Non-operational message. 
-message Noop {}
+// Non-operational message. An extra secure client can periodically
+// send these as decoys then delay real messages to be sent instead
+// of a periodic noop.
+message Noop {
+  // Should be a random length, up to the max message length.
+  string filler = 1;
+}
  
 message Datagram {
   bytes nonce = 1;  // Same as nonce in C2S Datagram
@@ -81,6 +86,7 @@ message Datagram {
     Text text = 5; 
     Video video = 6; 
     Noop noop = 7;
+    RoomInvitation invitation = 8;  // To invite to a separate room.
   }
 }
 
