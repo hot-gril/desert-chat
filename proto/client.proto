@@ -14,6 +14,7 @@ message RoomProfile {
 
 message Hello {
   reserved 1;
+
   string hostname = 2;
 
   // Public, secures the libnacl boxes in the DM channel to this user.
@@ -28,6 +29,7 @@ message Hello {
   string dm_channel_id = 6;
   UserProfile user_profile = 7;
   RoomProfile room_profile = 8;
+  bytes invitation_key = 9;  // same as in RoomInvitation
 }
 
 message MasterHello {
@@ -63,6 +65,9 @@ message Video {
   bytes buffer = 1;
 }
 
+// Non-operational message. 
+message Noop {}
+ 
 message Datagram {
   bytes nonce = 1;  // Same as nonce in C2S Datagram
 
@@ -75,6 +80,7 @@ message Datagram {
     MasterHello master_hello = 4;
     Text text = 5; 
     Video video = 6; 
+    Noop noop = 7;
   }
 }
 
@@ -86,4 +92,24 @@ message Datagram {
 message SignedDatagram {
   bytes signature = 1;  // libnacl detached signature of the datagram's serialized proto.
   Datagram datagram = 2;
+}
+
+// The full, cold saved state of a client that's in a room,
+// for saving and loading application state.
+// SENSITIVE. Store this safely, ideally locally!
+message SavedClient {
+  string hostname = 1;
+  RoomInvitation room_invitation = 2;
+  bytes datagram_sign_secret = 3;
+  bytes datagram_sign_public = 4;
+  UserProfile user_profile = 5;
+}
+message SavedMasterClient {
+  SavedClient base = 1;
+  MasterHello master_hello = 2;
+  string dm_channel_id = 3;
+  bytes dm_sign_secret = 4;
+  bytes dm_sign_public = 5;
+  bytes dm_encrypt_secret = 6;
+  bytes dm_encrypt_public = 7;
 }

@@ -7,7 +7,7 @@ package desert.server;
 message Datagram {
   enum QosType {  // For quality-of-service only.
     UNKNOWN = 0;
-    TEXT_CHAT = 1;  // Including hellos.
+    TEXT_CHAT = 1;  // Including control messages.
     AUDIO_CHAT = 2;
     VIDEO_CHAT = 3;
     FILE_TRANSFER = 4;
