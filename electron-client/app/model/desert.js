@@ -5,7 +5,7 @@ const {PubSub} = require('./pubsub')
 const util = require("util")
 
 
-const DEBUG = true
+const DEBUG = false
 function debug() {
   if (!DEBUG) return
   console.debug(...arguments)
@@ -177,7 +177,7 @@ class Client {
       try {
         this.ws.send(buffer)
       } catch(err) {
-        console.log("Error while sending on websocket", err)
+        console.debug("Error while sending on websocket", err)
       }
     }.bind(this))
   }
@@ -192,7 +192,7 @@ class Client {
     try {
       this.ping()
     } catch(err) {
-      console.log("Error during ping", err) 
+      console.debug("Error during ping", err) 
     }
     setTimeout(function() {
       this.pingLoop() 
@@ -387,6 +387,43 @@ class RoomParticipantClient extends Client {
       userProfile: userProfile,
     })
     this.hellos[helloId(this.hello)] = this.hello
+  }
+
+  isContact(uuid) {
+    return this.identity.contacts[uuid] !== undefined
+  }
+
+  getContact(uuid) {
+    return this.identity.contacts[uuid]
+  }
+
+  setContact(uuid, nickname) {
+    this.identity.contacts[uuid] = nickname
+  }
+
+  unsetContact(uuid) {
+    this.identity.contacts[uuid] = undefined
+  }
+
+  userIdName(hello) {
+    var identity = undefined
+    hello = hello || {}
+    if (hello && !identity && !hello.datagramSigningKey) {  // detects type of `hello`
+      identity = hello
+      hello = {}
+    }
+    identity = identity || {}
+    var ret = (hello.userProfile || {}).displayName || identity.displayName
+      || ("anon " + Buffer.from(hello.datagramSigningKey || identity.datagramSignPair.publicKey).toString("hex").substr(0, 7))
+    return ret.replace(/\W/g, '')
+  }
+
+  userName(hello) {
+    const nickname = (this.identity.contacts || {})[helloId(hello)]
+    if (nickname === undefined) {
+      return this.userIdName(hello)
+    }
+    return "✓ " + nickname
   }
 
   async invite(uuid, invitation) {
@@ -625,6 +662,7 @@ function makeIdentity() {
   return {
     displayName: "",
     datagramSignPair: newSignKeyPair(),
+    contacts: {},
   }
 }
 async function baseClientToProto(client) {
@@ -637,6 +675,7 @@ async function baseClientToProto(client) {
     userProfile: proto.client.UserProfile.create({displayName:
       client.identity.displayName}),
   })
+  console.log("baseClientToProto", {client, ret})
   return ret
 }
 async function masterClientToProto(client) {

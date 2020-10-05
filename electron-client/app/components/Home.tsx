@@ -4,16 +4,17 @@ import styles from './Home.css';
 import common from "./common"
 const desert = require("../model/desert")
 const global = require("../model/global")
+import PersistentState from "../model/saved";
 const electron = require("electron")
 import FlatList from 'flatlist-react';
 import Dropdown from 'react-dropdown';
 import 'react-dropdown/style.css';
 import Loader from 'react-loader-spinner'
 import "react-loader-spinner/dist/loader/css/react-spinner-loader.css"
+const prompt = require('electron-prompt');
 
-const kStoreIds = "identities"
-const kStoreClients = "clients"
 const kTimeoutMs = 5000
+const pstate = new PersistentState()
 
 class RoomButton extends React.Component {
   constructor(props) {
@@ -114,41 +115,28 @@ class JoinDialog extends React.Component {
   }
 
   componentDidMount() {
-    var ids = {}
-    var idsArray = []
-    try {
-      idsArray = global.store.get(kStoreIds) || []
-      for (let id of idsArray) {
-        id.datagramSignPair = {
-          publicKey: new Uint8Array(id.datagramSignPair.publicKey),
-          secretKey: new Uint8Array(id.datagramSignPair.secretKey),
+    (async function() {
+      const {ids, idsArray} = await pstate.getIds()
+      var tries = 0
+      var dropdownIds
+      while (tries < 2) {
+        try {
+          dropdownIds = idsArray.map(function(id) {
+            return {
+              value: desert.helloId(id),
+              label: common.userName(undefined, id),
+            }
+          })
+          break
+        } catch(err) {
+          handleError(`Couldn't load saved state: ${err}`)
+          ids = {}
+          idsArray = []
+          tries++
         }
-        ids[desert.helloId(id)] = id
       }
-    } catch(err) {
-      handleError(`Couldn't load saved state: ${err}`)
-      ids = {}
-      idsArray = []
-    }
-    var tries = 0
-    var dropdownIds
-    while (tries < 2) {
-      try {
-        dropdownIds = idsArray.map(function(id) {
-          return {
-            value: desert.helloId(id),
-            label: common.userName(undefined, id),
-          }
-        })
-        break
-      } catch(err) {
-        handleError(`Couldn't load saved state: ${err}`)
-        ids = {}
-        idsArray = []
-        tries++
-      }
-    }
-    this.setState({ids, idsArray, dropdownIds})
+      this.setState({ids, idsArray, dropdownIds})
+    }.bind(this))()
   }
 
   handleError(e) {
@@ -171,7 +159,7 @@ class JoinDialog extends React.Component {
     this.setState({roomName: event.target.value})
   }
 
-  handleSubmit(event) {
+  async handleSubmit(event) {
     event.preventDefault()
     var invitationCode = null
     if (this.state.mode == "join") {
@@ -189,8 +177,7 @@ class JoinDialog extends React.Component {
       username = "anon"
     }
     if (username) {
-      const ids = this.state.ids
-      const idsArray = this.state.idsArray
+      const {ids, idsArray} = await pstate.getIds()
       id = desert.makeIdentity()
       id.displayName = this.state.username
       ids[desert.helloId(id)] = id
@@ -198,7 +185,7 @@ class JoinDialog extends React.Component {
       const dropdownIds = this.state.dropdownIds
       dropdownIds.unshift({value: desert.helloId(id), label: common.userName(undefined, id)})
       try {
-        global.store.set(kStoreIds, idsArray)
+        await pstate.save()
       } catch(err) {
         common.handleError(`Failed to save: ${err}`)
       }
@@ -365,22 +352,28 @@ class ParticipantList extends React.Component {
       update: false,
       menuX: undefined,
       menuY: undefined,
+      selected: undefined,
     }
   }
 
-  onClick(event) {
+  onClick(event, userHello) {
     event.preventDefault()
     event.stopPropagation()
-    console.log("onClick", event.clientX, event.clientY)
-    this.setState({menuX: event.clientX, menuY: event.clientY})
+    this.setState({
+      menuX: event.clientX,
+      menuY: event.clientY,
+      selected: userHello,
+    })
   }
 
   renderItem(userHello, idx) {
     const isSelf = desert.helloId(userHello) == desert.helloId(this.props.client.identity)
     return (
       <li key={idx} style={{color : isSelf ? common.color.selfText : undefined, fontWeight: isSelf ? "bold" : undefined}}>
-        <div onClick={this.onClick.bind(this)}>
-          {common.userName(userHello)}
+        <div onClick={(e) => {
+          this.onClick(e, userHello)
+        }}>
+          {this.props.client.userName(userHello)}
         </div>
       </li>
     )
@@ -393,20 +386,58 @@ class ParticipantList extends React.Component {
   }
 
   render() {
+    const client = this.props.client
+    const selected = this.state.selected
+    const selectedId = selected ? desert.helloId(selected) : undefined
+    var menuOptions
+    var menuMode
+    if (selectedId == desert.helloId(client.identity)) {
+      menuOptions = ["This is you"]
+      menuMode = "self"
+    } else if (client.isContact(selectedId)) {
+      menuOptions = ["Remove contact", "Rename"]
+      menuMode = "rm"
+    } else if (selectedId) {
+      menuOptions = ["Add contact"]
+      menuMode = "add"
+    } 
+
     return (
       <div style={{color: common.c.text}} onClick={() => {
-        console.log("onClick outside")
         this.setState({menuX: undefined, menuY: undefined}) 
       }}>
         <common.ContextMenu
           xPos={this.state.menuX} yPos={this.state.menuY}
           onMouseLeave={() => {this.setState({
             menuX: undefined, menuY: undefined})}}
-            options={["Add contact"]}
-            onClick={(o) => {
+            options={menuOptions}
+            onClick={
+              async function(o) {
               this.setState({menuX: undefined, menuY: undefined})
-              console.log("selected", o)
-            }}
+              if (menuMode == "add") {
+                const nickname = await prompt({
+                    title: "Choose a nickname", 
+                    value: client.userName(selected)
+                  }, electron.window)
+                  client.setContact(selectedId, nickname)
+                  await pstate.save()
+                  this.setState({update: !this.state.update})
+                } else if (menuMode == "rm") {
+                  if (o == "Remove contact") {
+                    client.unsetContact(selectedId)
+                    await pstate.save()
+                  } else if (o == "Rename") {
+                const nickname = await prompt({
+                    title: "Choose a nickname", 
+                    value: client.userName(selected)
+                  }, electron.window)
+                  client.setContact(selectedId, nickname)
+                    await pstate.save()
+                  this.setState({update: !this.state.update})
+                }
+              }
+              }.bind(this)
+            }
           />
         <Title fontSize={20}>
           {"Users"}
@@ -418,17 +449,17 @@ class ParticipantList extends React.Component {
           }}>
           <ul style={{listStyle: "none", margin: 10, padding: 0}}>
             <FlatList
-              list={Object.values(this.props.client.hellos).sort(function(a, b) {
+              list={Object.values(client.hellos).sort(function(a, b) {
                 if (desert.helloId(a) ==
-                  desert.helloId(this.props.client.identity)) {
+                  desert.helloId(client.identity)) {
                   return -1
                 }
                 if (desert.helloId(b) ==
-                desert.helloId(this.props.client.identity)) {
+                desert.helloId(client.identity)) {
                   return 1 
                 }
-                const aName = common.userName(a)
-                const bName = common.userName(b)
+                const aName = client.userName(a)
+                const bName = client.userName(b)
                 if (aName == bName) return 0
                 return aName < bName ? -1 : 1
               }.bind(this))}
@@ -457,7 +488,7 @@ function getRoomName(client) {
       return aName < bName ? -1 : 1
     })
     others.unshift(client.identity)
-    var nameList = others.slice(0, maxNames).map(common.userName).join(", ")
+    var nameList = others.slice(0, maxNames).map(client.userName.bind(client)).join(", ")
     if (others.length > maxNames) {
       roomName = nameList + ` + ${others.length - maxNames}`
     } else {
@@ -883,12 +914,10 @@ class HomeWindow extends React.Component {
 
   componentDidMount() {
     (async function() {
+      const {ids, idsArray} = await pstate.getIds();
       this.setState({loading: true})
       try {
-        var clients = global.store.get(kStoreClients) || []
-        clients = await Promise.all(clients.map(desert.objectToParticipant))
-        console.debug("loaded clients", clients)
-        clients.reverse()
+        const clients = await pstate.getClients()
         var i = 0
         for (let client of clients) {
           if (client.invitationProto) {
@@ -906,10 +935,7 @@ class HomeWindow extends React.Component {
 
   async saveClients() {
     try {
-      const clients = await Promise.all(
-        this.state.clients.map(desert.participantToObject)
-      )
-      global.store.set(kStoreClients, clients)
+      await pstate.save(this.state.clients)
     } catch(err) {
       common.handleError(`Failed to save rooms: ${err}`)
     }

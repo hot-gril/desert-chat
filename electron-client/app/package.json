@@ -15,5 +15,6 @@
   },
   "license": "MIT",
   "dependencies": {
+    "electron-prompt": "^1.6.0"
   }
 }

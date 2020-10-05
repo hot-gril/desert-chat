@@ -12,7 +12,9 @@ const color = {
   selfText: "#ade2ff",
 }
 
-// `identity` field is deprecated; just pass a hello or identity into `hello`
+// DEPRECATED
+// You probably actually want model/desert.js userName,
+// which will handle nicknames too.
 const userName = function(hello, identity) {
   hello = hello || {}
   if (hello && !identity && !hello.datagramSigningKey) {  // detects type of `hello`
@@ -50,7 +52,7 @@ class ContextMenu extends React.Component {
           style={{
             position: "absolute",
               listStyle: "none",
-              padding: 0,
+              padding: 10,
               margin: 10,
               top: yPos,
               left: xPos,
@@ -60,7 +62,9 @@ class ContextMenu extends React.Component {
         >
           {this.props.options.map(o => {
             return (
-					    <li>{o}</li>
+              <li style={{padding: 5}} onClick={() => {
+                this.props.onClick(o)  
+              }}>{o}</li>
             )
           })} 
 				</ul>
