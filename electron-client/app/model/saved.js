@@ -41,6 +41,7 @@ export default class PersistentState {
       idsArray = idsArray || []
       for (let id of idsArray) {
         id.datagramSignPair = {
+          // deals with weirdness of Uint8Array serialization
           publicKey: new Uint8Array(id.datagramSignPair.publicKey),
           secretKey: new Uint8Array(id.datagramSignPair.secretKey),
         }
@@ -90,8 +91,16 @@ export default class PersistentState {
       const clients2 = await Promise.all(
         this._clients.map(desert.participantToObject)
       )
-      console.log("set", {kStoreIds, ids: this._idsArray})
-      global.store.set(kStoreIds, this._idsArray)
+      const ids2 = this._idsArray.map(function(id) {
+        const id2 = JSON.parse(JSON.stringify(id))  // lmao copies it
+        id2.datagramSignPair = {
+          // deals with weirdness of Uint8Array serialization
+          publicKey: Array.from(id.datagramSignPair.publicKey),
+          secretKey: Array.from(id.datagramSignPair.secretKey),
+        }
+        return id2
+      })
+      global.store.set(kStoreIds, ids2)
       global.store.set(kStoreClients, clients2)
       console.trace("saved persistent state",
         {clients2, ids: this._idsArray})
