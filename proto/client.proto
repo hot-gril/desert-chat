@@ -1,121 +1,202 @@
-// Client-to-client protocol, always end-to-end encrypted.
-
 syntax = "proto3";
 
 package desert.client;
+import desert.server;
+
+
+/* WIRE PROTOCOL */
+// This is all opaque to the server, shielded behind e2ee.
+
+// A server-side channel. Could be DM, room, etc.
+message ServerChannel {
+  string hostname = 1;
+  string pubsub_topic = 2;
+}
 
 message UserProfile {
   string display_name = 1;
+}
+
+// Identifies a human user.
+// Multiple clients may share one identity.
+message Identity {
+  // Libnacl public detached signature key.
+  // Also can be used as a unique key for this identity.
+  bytes pub_signing_key = 1;
+
+  UserProfile user_profile = 2;  
+}
+
+// A DM channel, which only goes to one user and is encrypted
+// asymmetrically using libnacl box.
+// Only used for ParticipantHello and MasterHello.
+message DmChannel {
+  ServerChannel server_channel = 1;
+  bytes public_signing_key = 2;
+  bytes public_encryption_key = 3;
+}
+
+// Everything the other clients need to know about a client.
+// Sent when the client joins the room.
+message ClientHello {
+  DmChannel dm_channel = 1;
+  Identity identity = 2;
 }
 
 message RoomProfile {
   string display_name = 1;
 }
 
-message Hello {
-  reserved 1;
-
-  string hostname = 2;
-
-  // Public, secures the libnacl boxes in the DM channel to this user.
-  bytes dm_signing_key = 3;
-  bytes dm_encryption_key = 4;
-
-  // Public, validates authorship. See SignedDatagram.
-  // Unfortunately, this can't be the same as dm_signing_key because for some reason
-  // libnacl's detached signatures use a different kind of key from its boxes.
-  bytes datagram_signing_key = 5;
-
-  string dm_channel_id = 6;
-  UserProfile user_profile = 7;
-  RoomProfile room_profile = 8;
-  bytes invitation_key = 9;  // same as in RoomInvitation
-}
-
-message MasterHello {
-  // Symmetric, secures the libnacl secretboxes to the room channel.
-  bytes room_key = 1;
-
-  string room_channel_id = 2;
-  RoomProfile room_profile = 3;
-  repeated SignedDatagram participant_hellos = 4;
-}
-
 message RoomInvitation {
-  string dm_channel_id = 1;
-  string dm_hostname= 2;
-
-  // Public, secures the libnacl boxes in the DM channel to the room master.
-  bytes dm_signing_key = 3;
-  bytes dm_encryption_key = 4;
+  // The DM channel of the room master client.
+  DmChannel master_dm_channel = 1;
 
   // Symmetric. Not known to server, so server can't join as a user.
   // (Probably the DM keys are already random enough to be unguessable, but thou shalt
   //  only use cryptographic keys for their single intended purpose.)
-  bytes invitation_key = 5;
+  bytes invitation_key = 2;
 
-  RoomProfile room_profile_preview = 6;
+  // May only be a subset of the fields.
+  RoomProfile room_profile_preview = 3;
 }
 
-message Text {
-  string body = 1;
+// One room may have multiple channels. This is mainly to separate
+// them by purpose.
+// All room channels are secured with the same libnacl symmetric
+// encryption (secretbox) key.
+message RoomChannel {
+  enum Purpose {
+    UNKNOWN = 0;
+    CONTROL = 1;  // Reliability matters the most, ordering second.
+    TEXT = 2;  // Ordering matters the most, reliability second.
+    VIDEO = 3;  // Ordering and reliability don't matter very much.
+    FILE = 4;  // Ordering and reliability matter even less than in video.
+  }
+  Purpose purpose = 1;
+  ServerChannel server_channel = 2;
 }
 
-message Video {
-  bytes buffer = 1;
+// Sent from the room master to the new participant client upon
+// joining, or to the existing participants to update the room
+// (like when someone joins and a new key is generated).
+message MasterHello {
+  bytes room_key = 1;
+
+  // Should always at least have one control channel.
+  repeated RoomChannel room_channels = 2;
+
+  RoomProfile room_profile = 3;
+  repeated SignedDatagram participant_hellos = 4;
 }
 
-// Non-operational message. An extra secure client can periodically
-// send these as decoys then delay real messages to be sent instead
-// of a periodic noop.
-message Noop {
-  // Should be a random length, up to the max message length.
-  string filler = 1;
-}
- 
 message Datagram {
   bytes nonce = 1;  // Same as nonce in C2S Datagram
 
   // No gaps.
-  // Establishes both completeness and per (client, channel) ordering.
+  // Establishes per <identity, server channel> ordering and completeness.
   int64 sequence_number = 2;
 
+  message Text {
+    string body = 1;
+  }
+  message Video {
+    bytes buffer = 1;
+  }
+  message Noop {
+    // Non-operational message. An extra secure client can periodically
+    // send these as decoys then delay real messages to be sent instead
+    // of the periodic noops.
+  }
+  message ParticipantHello {
+    // Sent from the new participant client to the room master upon
+    // joining.
+
+    ClientHello client_hello = 1;
+    bytes invitation_key = 2;  // Same as in the room invitation.
+  }
   oneof type {
     Hello hello = 3;
     MasterHello master_hello = 4;
-    Text text = 5; 
-    Video video = 6; 
-    Noop noop = 7;
-    RoomInvitation invitation = 8;  // To invite to a separate room.
+    ParticipantHello participant_hello = 5;
+    Text text = 6; 
+    Video video = 7; 
+    Noop noop = 8;
+    RoomInvitation invitation = 9;  // To invite to a separate room.
   }
 }
 
 // The DM and room channels are already signed and encrypted,
 // but everyone in the room has the same signing key, so within
 // that envelope we also need the author to sign its messages.
-// Also, the room master relays participants' hellos via DMs,
-// and that needs to be tamper-resistant.
+// Also, a client may relay another client's message.
 message SignedDatagram {
   bytes signature = 1;  // libnacl detached signature of the datagram's serialized proto.
   Datagram datagram = 2;
 }
 
-// The full, cold saved state of a client that's in a room,
-// for saving and loading application state.
-// SENSITIVE. Store this safely, ideally locally!
-message SavedClient {
-  string hostname = 1;
-  RoomInvitation room_invitation = 2;
-  bytes datagram_sign_secret = 3;
-  bytes datagram_sign_public = 4;
-  UserProfile user_profile = 5;
+// <channel, identity> pair along with nack.
+message C2cNack {
+  ServerChannel server_channel = 1; 
+  bytes identity = 2;  // Same as pub_signing_key.
+  Nack nack = 3;
 }
-message SavedMasterClient {
-  SavedClient base = 1;
+
+// The outermost message that goes through a channel.
+message C2C {
+  oneof payload {
+    SignedDatagram datagram = 1;
+
+    // Asks anyone in the channel to resend someone's SignedDatagram(s).
+    C2cNack nack = 2; 
+  }
+}
+
+
+/* APPLICATION COLD STATE */
+// Sensitive! Store it locally and/or encrypted.
+
+message ChannelState {
+  ServerChannel server_channel = 1;
+  Nack server_channel_nack = 2; 
+
+  // Keyed by something bijective with the pub_signing_key.
+  map<string, C2cNack> c2c_nacks = 2; 
+}
+
+// Everything to store for a client (one per chat room).
+message ClientState {
+  DmChannel dm_channel = 1;
   MasterHello master_hello = 2;
-  string dm_channel_id = 3;
-  bytes dm_sign_secret = 4;
-  bytes dm_sign_public = 5;
-  bytes dm_encrypt_secret = 6;
-  bytes dm_encrypt_public = 7;
+  repeated ChannelState channel_states = 3;
+}
+
+message AppState {
+  // All identities this app owns.
+  message OwnedIdentity {
+    Identity public = 1;
+    bytes pri_signing_key = 2;  // Private!
+
+    message Contact {
+      string nickname = 1;  // Set by your user, not the contacted user.
+      Identity identity = 2;
+
+      // All known ways to DM the contact.
+      repeated DmChannel dm_channels = 3;
+    }
+    // Keyed by nickname.
+    map<string, Contact> contacts = 3;
+  }
+  // Keyed by something bijective with the pub_signing_key.
+  map<string, OwnedIdentity> owned_identities = 1;
+
+  message Room {
+    string identity_key = 1;  // The identity being used.
+
+    // A client can either rejoin the room as-new or
+    // try to recover using the warmer client state.
+    RoomInvitation invitation = 2;
+    ClientState client_state = 3;
+  }
+  // All the rooms the app is in, ordered.
+  repeated Room rooms = 2;
 }

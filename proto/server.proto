@@ -4,6 +4,18 @@ syntax = "proto3";
 
 package desert.server;
 
+// Indicates missing messages in a channel.
+message Nack {
+  message Range {
+    // Sequence numbers.
+    // Negative for either means open-ended.
+
+    int64 start = 1;  // Inclusive.
+    int64 stop = 2;  // Non-inclusive.
+  } 
+  repeated Range ranges = 2;
+}
+
 message Datagram {
   enum QosType {  // For quality-of-service only.
     UNKNOWN = 0;
@@ -55,6 +67,14 @@ message PingRequest {}
 
 message PingResponse {}
 
+message NackRequest {
+  Nack nack = 1;
+}
+
+message NackResponse {
+  repeated Datagram datagrams = 2;
+}
+
 message C2sRequest {
   int64 id = 1;
   oneof method {
@@ -63,6 +83,7 @@ message C2sRequest {
     SubRequest sub = 4; 
     UnsubRequest unsub = 5; 
     PingRequest ping = 6; 
+    NackRequest nack = 7;
   }
 }
 
@@ -75,5 +96,6 @@ message C2sResponse {
     UnsubResponse unsub = 5; 
     Datagram incoming_datagram = 6;
     PingResponse ping = 7;
+    NackResponse nack = 8;
   }
 }
