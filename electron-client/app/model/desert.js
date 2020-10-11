@@ -94,17 +94,15 @@ const helloId = function(hello) {
   return naclUtil.encodeBase64(key)
 }
 
-// abstract
 class Client {
-  constructor(proto, ws, hostname, options) {
-    options = options || {}
-    this.options = options
-    this.proto = proto
-    this.ws = ws
-    this.hostname = hostname
+  constructor(proto, owned_identity, client_state=undefined) {
+    this.owned_identity = owned_identity
+    this.client_state = client_state
+
+    // Transient client-server state. 
+    this.requestCtr = 0
     this.pendingRequests = {}
-    this.c2sCounter = 0  // Client-to-server sequence number.
-    this.c2cCounters = {}  // Map from destination channel ID to integer.
+
     this.signPair = newBoxKeyPair()
     this.encryptPair = newBoxKeyPair()
     this.dmChannelId = undefined
@@ -614,7 +612,7 @@ const setup = async function() {
   const proto = {
     client: {
       root: clientRoot,
-      UserProfile: clientRoot.lookupType("desert.client.UserProfile"),
+      Identity: clientRoot.lookupType("desert.client.Identity"),
       RoomProfile: clientRoot.lookupType("desert.client.RoomProfile"),
       Hello: clientRoot.lookupType("desert.client.Hello"),
       MasterHello: clientRoot.lookupType("desert.client.MasterHello"),

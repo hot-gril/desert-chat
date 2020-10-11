@@ -158,9 +158,10 @@ message C2C {
 message ChannelState {
   ServerChannel server_channel = 1;
   Nack server_channel_nack = 2; 
+  int64 c2c_seq = 3;
 
   // Keyed by something bijective with the pub_signing_key.
-  map<string, C2cNack> c2c_nacks = 2; 
+  map<string, C2cNack> c2c_nacks = 4;
 }
 
 // Everything to store for a client (one per chat room).
@@ -175,6 +176,7 @@ message AppState {
   message OwnedIdentity {
     Identity public = 1;
     bytes pri_signing_key = 2;  // Private!
+    bytes pri_encryption_key = 3;  // Private!
 
     message Contact {
       string nickname = 1;  // Set by your user, not the contacted user.
@@ -184,7 +186,7 @@ message AppState {
       repeated DmChannel dm_channels = 3;
     }
     // Keyed by nickname.
-    map<string, Contact> contacts = 3;
+    map<string, Contact> contacts = 4;
   }
   // Keyed by something bijective with the pub_signing_key.
   map<string, OwnedIdentity> owned_identities = 1;
