@@ -144,7 +144,7 @@ message C2cNack {
 // The outermost message that goes through a channel.
 message C2C {
   oneof payload {
-    SignedDatagram datagram = 1;
+    SignedDatagram signed_datagram = 1;
 
     // Asks anyone in the channel to resend someone's SignedDatagram(s).
     C2cNack nack = 2; 
@@ -168,15 +168,17 @@ message ChannelState {
 message ClientState {
   DmChannel dm_channel = 1;
   MasterHello master_hello = 2;
-  repeated ChannelState channel_states = 3;
+  bytes pri_dm_signing_key = 3;  // Private!
+  bytes pri_dm_encryption_key = 4;  // Private!
+  ChannelState dm_channel_states = 5;
+  repeated ChannelState room_channel_states = 6;
 }
 
 message AppState {
   // All identities this app owns.
   message OwnedIdentity {
     Identity public = 1;
-    bytes pri_signing_key = 2;  // Private!
-    bytes pri_encryption_key = 3;  // Private!
+    bytes pri_detached_signing_key = 2;  // Private!
 
     message Contact {
       string nickname = 1;  // Set by your user, not the contacted user.
@@ -185,19 +187,20 @@ message AppState {
       // All known ways to DM the contact.
       repeated DmChannel dm_channels = 3;
     }
-    // Keyed by nickname.
-    map<string, Contact> contacts = 4;
+    // Keyed by something bijective with identity pub_signing_key.
+    map<string, Contact> contacts = 3;
   }
   // Keyed by something bijective with the pub_signing_key.
   map<string, OwnedIdentity> owned_identities = 1;
 
   message Room {
     string identity_key = 1;  // The identity being used.
+    string hostname = 2;
 
     // A client can either rejoin the room as-new or
     // try to recover using the warmer client state.
-    RoomInvitation invitation = 2;
-    ClientState client_state = 3;
+    RoomInvitation invitation = 5;
+    ClientState client_state = 6;
   }
   // All the rooms the app is in, ordered.
   repeated Room rooms = 2;

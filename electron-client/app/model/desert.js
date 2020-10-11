@@ -15,7 +15,7 @@ const inspect = function(obj) {
   return JSON.stringify(obj)
 }
 
-class AutoReconnectWebSocket {
+class ReconnectableWebSocket {
   constructor(url) {
     this.url = url
     this.ws = undefined
@@ -56,37 +56,6 @@ class AutoReconnectWebSocket {
   }
 }
 
-function newSocket(hostname) {
-  return new Promise(function(resolve, reject) {
-    const ws = new AutoReconnectWebSocket(`ws://${hostname}`);
-    ws.onopen = function() {
-      console.info("Connected to server " + hostname)
-      resolve(ws)
-    }
-  })
-}
-
-const setJsonSerialization = function(keyPair) {
-  keyPair.toJSON = function(_) {
-    return {
-      publicKey: Array.from(keyPair.publicKey),
-      secretKey: Array.from(keyPair.secretKey),
-    }
-  }.bind(keyPair)
-}
-
-const newSignKeyPair = function() {
-  const ret = nacl.sign.keyPair()
-  setJsonSerialization(ret)
-  return ret
-}
-
-const newBoxKeyPair = function() {
-  const ret = nacl.box.keyPair()
-  setJsonSerialization(ret)
-  return ret
-}
-
 // Returns a key that unique identifies a hello or local identity
 const helloId = function(hello) {
   var key = hello.datagramSigningKey
@@ -94,82 +63,70 @@ const helloId = function(hello) {
   return naclUtil.encodeBase64(key)
 }
 
-class Client {
-  constructor(proto, owned_identity, client_state=undefined) {
-    this.owned_identity = owned_identity
-    this.client_state = client_state
+function newSocket(hostname) {
+  return new Promise(function(resolve, reject) {
+    const ws = new ReconnectableWebSocket(`ws://${hostname}`);
+    ws.onopen = function() {
+      console.info("Connected to server " + hostname)
+      resolve(ws)
+    }
+  })
+}
 
-    // Transient client-server state. 
+// Handles interactions with the server itself.
+// Ephemeral. State doesn't need to be stored.
+// Can (and should) be shared by multiple DesertClients.
+class ServerClient {
+  constructor(proto, hostname) {
+    this.proto = proto
     this.requestCtr = 0
     this.pendingRequests = {}
-
-    this.signPair = newBoxKeyPair()
-    this.encryptPair = newBoxKeyPair()
-    this.dmChannelId = undefined
-    this.identity = options.identity || makeIdentity()
-    this.identity.datagramSignPair.publicKey = new Uint8Array(this.identity.datagramSignPair.publicKey)
-    this.identity.datagramSignPair.secretKey = new Uint8Array(this.identity.datagramSignPair.secretKey)
-    setJsonSerialization(this.identity.datagramSignPair)
-    this.pubsub = new PubSub()
+    this.handleC2C = undefined
+    this.ws = undefined
   }
 
-  isInitialized() {
-    return this.dmChannelId !== undefined
-  }
-
-  checkInitialized() {
-    if (!this.isInitialized()) throw "uninitialized"
+  checkInit() {
+    if (this.ws === undefined) {
+      throw "You must call init() before doing that"
+    }
   }
 
   async init() {
-    console.info("Initializing client " + helloId(this.identity))
+    this.ws = await newSocket(hostname)
     this.ws.onmessage = async function(event) {
       const data = event.data
       const bytes = new Uint8Array(await data.arrayBuffer())
       const message = this.proto.server.C2sResponse.decode(bytes)
-      debug(`${this.name()} rx from server: ${inspect(message)}`)
-      if (message.incomingDatagram && this.isInitialized()) {
-        this.handleC2C(message)
+      debug(`rx from server: ${inspect(message)}`)
+      if (message.incomingDatagram) {
+        if (this.handleC2C !== undefined) {
+          this.handleC2C(message)
+        }
       } else {
         const f = this.pendingRequests[message.id]
         if (f === undefined) {
-          console.warn(`${this.name()} ignoring unsolicited message from server`)
+          console.warn(`ignoring unsolicited message from server`)
           return
         }
         delete this.pendingRequests[message.id]
         f(message)
       }
     }.bind(this)
-    if (this.isInitialized()) return
-    const dmChannelId = await this.createChannel()
-    if (this.isInitialized()) return  // checks again in case of concurrent initialization
-    this.dmChannelId = dmChannelId
     this.pingLoop()
-    console.info("Finished initializing client " + helloId(this.identity))
   }
 
-  // for debugging
-  name() {
-    throw "unimplemented"
-  }
-
-  async handleC2C(message) {
-    throw "unimplemented"
-  }
-
-  request(req, timeout) {
-    timeout = timeout || 5000
+  request(req, timeout=5000) {
+    this.checkInit()
     return new Promise(function(resolve, reject) {
       req.id = this.c2sCounter
       this.c2sCounter++
       this.pendingRequests[req.id] = resolve
       const buffer = this.proto.server.C2sRequest.encode(req).finish()
-      debug(`${this.name()} tx to server ${inspect(req)}`)
+      debug(`tx to server ${inspect(req)}`)
       setTimeout(function() {
         if (this.pendingRequests[req.id] !== undefined) {
           this.pendingRequests[req.id] = undefined  // gives up
           this.ws.reset()
-          //reject(`${timeout}ms timeout reached`)
         }
       }.bind(this), timeout)
       try {
@@ -181,12 +138,14 @@ class Client {
   }
 
   async ping() {
+    this.checkInit()
     await this.request(this.proto.server.C2sRequest.create({
       ping: this.proto.server.PingRequest.create({})
     }))
   }
 
   async pingLoop() {
+    this.checkInit()
     try {
       this.ping()
     } catch(err) {
@@ -197,8 +156,8 @@ class Client {
     }.bind(this), 1000 * 60)
   }
 
-  async createChannel(subscribe=undefined) {
-    if (subscribe === undefined) subscribe = true
+  async createChannel(subscribe=true) {
+    this.checkInit()
     const resp = await this.request(this.proto.server.C2sRequest.create({
       createChannel: this.proto.server.CreateChannelRequest.create({})
     }))
@@ -213,11 +172,80 @@ class Client {
   }
 
   async subscribeToChannel(id) {
+    this.checkInit()
     await this.request(this.proto.server.C2sRequest.create({
       sub: this.proto.server.SubRequest.create({
         channelId: id
       })
     }))
+  }
+}
+
+class DesertClient {
+  constructor(proto,  // proto definitions
+    hostname,
+    serverClients,  // dict, hostname->ServerClient
+    ownedIdentity,  // OwnedIdentity proto
+    clientState=undefined  // ClientState proto
+  ) {
+    this.hostname = hostname,
+    this.proto = proto
+    this.ownedIdentity = ownedIdentity
+    this.pubsub = new PubSub()
+    this.serverClients = serverClients
+    this.clientState = clientState
+  }
+
+  async init() {
+    const sc = await this.getServerClient()
+    if (this.clientState !== undefined) {
+      await sc.subscribeToChannel(this.
+        clientState.dmChannel.serverChannel.pubsubTopic)
+      return
+    }
+    const serverChannel = this.proto.client.ServerChannel.create({
+      hostname: clientState.hostname,
+      pubsubTopic: await sc.createChannel(),
+    })
+    const dmEncKeypair = nacl.box.keyPair()
+    const dmSigKeypair = nacl.box.keyPair()
+    const dmChannel = this.proto.client.DmChannel.create({
+      serverChannel,
+      publicEncryptionKey: dmEncKeypair.publicKey,
+      publicSigningKey: dmSigKeypair.publicKey,
+    })
+    this.clientState = this.proto.client.ClientState.create({
+      dmChannel,
+      priDmSigningKey: dmSigKeypair.secretKey,
+      priDmEncryptionKey: dmEncKeypair.secretKey,
+    })
+  }
+
+  isContact(uuid) {
+    return this.ownedIdentity.contacts[uuid] !== undefined
+  }
+
+  getContact(uuid) {
+    return this.ownedIdentity.contacts[uuid]
+  }
+
+  setContact(uuid, contact) {
+    this.ownedIdentity.contacts[uuid] = contact
+  }
+
+  unsetContact(uuid) {
+    this.ownedIdentity.contacts[uuid] = undefined
+  }
+
+  async getServerClient(hostname) {
+    var c = this.serverClients[hostname]
+    if (c === undefined) {
+      c = new ServerClient(this.proto, hostname)
+      this.serverClients[hostname] = c
+      // all sync up to this point
+      await c.init()
+    }
+    return c
   }
 
   // `datagram` is a proto.client.Datagram,
@@ -230,42 +258,43 @@ class Client {
     symmetricKey,
     encryptionKey,
 
-    channelId,
-    hostname,
+    channelState,
     datagram,  // proto.client.Datagram
     includeIdentity
   }) {
-    this.checkInitialized()
-    if (this.c2cCounters[channelId] === undefined) {
-      this.c2cCounters[channelId] = 0
-    }
-    datagram.sequence_number = this.c2cCounters[channelId]
-    this.c2cCounters[channelId] += 1
+    channelState.c2cSeq += 1
+    datagram.sequenceNumber = channelState.c2cSeq
     const nonce = nacl.randomBytes(nacl.secretbox.nonceLength)
     datagram.nonce = nonce
     const datagramBytes = this.proto.client.Datagram.encode(datagram).finish()
-    const signature = nacl.sign.detached(datagramBytes, this.identity.datagramSignPair.secretKey)
+    const signature = nacl.sign.detached(datagramBytes,
+      this.ownedIdentity.priDetachedSigningKey)
     const signedDatagram = this.proto.client.SignedDatagram.create({
       signature,
       datagram,
     })
-    debug(`${this.name()} tx to another client: ${inspect(signedDatagram)}`)
-    const signedDatagramBytes = this.proto.client.SignedDatagram.encode(signedDatagram).finish()
+    const c2c = this.proto.client.C2C.create({
+      signedDatagram,
+    })
+    debug(`${this.name()} tx to another client: ${inspect(c2c)}`)
+    const c2cBytes = this.proto.client.C2C.encode(c2c).finish()
     var boxed
     if (symmetricKey) {
-      boxed = nacl.secretbox(signedDatagramBytes, nonce, Buffer.from(symmetricKey))
+      boxed = nacl.secretbox(c2cBytes, nonce, Buffer.from(symmetricKey))
     } else {
-      boxed = nacl.box(signedDatagramBytes, nonce,
+      boxed = nacl.box(c2cBytes, nonce,
         Buffer.from(encryptionKey), Buffer.from(this.signPair.secretKey))
     }
+    const hostname = channelState.serverChannel.hostname
     const c2sDatagram = this.proto.server.Datagram.create({
       dstHostname: hostname, nonce, payload: boxed, srcUuid: helloId(this.identity),
       dstChannelId: channelId
     })
     if (includeIdentity) c2sDatagram.srcPublicSigningKey = this.signPair.publicKey
-    await this.request(this.proto.server.C2sRequest.create({
-      tx: this.proto.server.TxRequest.create({datagram: c2sDatagram})
-    }))
+    await (await this.getServerClient(hostname)).request(
+      this.proto.server.C2sRequest.create({
+        tx: this.proto.server.TxRequest.create({datagram: c2sDatagram})
+      }))
   }
 }
 
