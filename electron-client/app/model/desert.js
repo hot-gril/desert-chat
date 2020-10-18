@@ -56,21 +56,8 @@ class ReconnectableWebSocket {
   }
 }
 
-// Returns a key that unique identifies a hello or local identity
-const helloId = function(hello) {
-  var key = hello.datagramSigningKey
-  if (!key) key = hello.datagramSignPair.publicKey
-  return naclUtil.encodeBase64(key)
-}
-
-function newSocket(hostname) {
-  return new Promise(function(resolve, reject) {
-    const ws = new ReconnectableWebSocket(`ws://${hostname}`);
-    ws.onopen = function() {
-      console.info("Connected to server " + hostname)
-      resolve(ws)
-    }
-  })
+const idName = function(identity) {
+  return naclUtil.encodeBase64(identity.pub_signing_key)
 }
 
 // Handles interactions with the server itself.
@@ -83,16 +70,25 @@ class ServerClient {
     this.pendingRequests = {}
     this.handleC2C = undefined
     this.ws = undefined
-  }
-
-  checkInit() {
-    if (this.ws === undefined) {
-      throw "You must call init() before doing that"
-    }
+    this.initialized = false
+    this.beingInitialized = false
   }
 
   async init() {
-    this.ws = await newSocket(hostname)
+    while (this.beingInitialized) {
+      await new Promise(r => setTimeout(r, 100))
+    }
+    if (this.initialized) {
+      return
+    }
+    this.beingInitialized = true
+    this.ws = await new Promise(function(resolve, reject) {
+      const ws = new ReconnectableWebSocket(`ws://${hostname}`);
+      ws.onopen = function() {
+        console.info("Connected to server " + hostname)
+        resolve(ws)
+      }
+    })
     this.ws.onmessage = async function(event) {
       const data = event.data
       const bytes = new Uint8Array(await data.arrayBuffer())
@@ -112,12 +108,14 @@ class ServerClient {
         f(message)
       }
     }.bind(this)
+    this.initialized = true
+    this.beingInitialized = false
     this.pingLoop()
   }
 
   request(req, timeout=5000) {
-    this.checkInit()
-    return new Promise(function(resolve, reject) {
+    return new Promise(async function(resolve, reject) {
+      await this.init()
       req.id = this.c2sCounter
       this.c2sCounter++
       this.pendingRequests[req.id] = resolve
@@ -127,25 +125,25 @@ class ServerClient {
         if (this.pendingRequests[req.id] !== undefined) {
           this.pendingRequests[req.id] = undefined  // gives up
           this.ws.reset()
+          reject("Server did not respond")
         }
       }.bind(this), timeout)
       try {
         this.ws.send(buffer)
       } catch(err) {
         console.debug("Error while sending on websocket", err)
+        reject(err)
       }
     }.bind(this))
   }
 
   async ping() {
-    this.checkInit()
     await this.request(this.proto.server.C2sRequest.create({
       ping: this.proto.server.PingRequest.create({})
     }))
   }
 
   async pingLoop() {
-    this.checkInit()
     try {
       this.ping()
     } catch(err) {
@@ -157,7 +155,6 @@ class ServerClient {
   }
 
   async createChannel(subscribe=true) {
-    this.checkInit()
     const resp = await this.request(this.proto.server.C2sRequest.create({
       createChannel: this.proto.server.CreateChannelRequest.create({})
     }))
@@ -172,7 +169,6 @@ class ServerClient {
   }
 
   async subscribeToChannel(id) {
-    this.checkInit()
     await this.request(this.proto.server.C2sRequest.create({
       sub: this.proto.server.SubRequest.create({
         channelId: id
@@ -194,31 +190,56 @@ class DesertClient {
     this.pubsub = new PubSub()
     this.serverClients = serverClients
     this.clientState = clientState
+    this.initialized = false
+    this.beingInitialized = false
+  }
+
+  async getServerClient(hostname) {
+    var c = this.serverClients[hostname]
+    if (c === undefined) {
+      c = new ServerClient(this.proto, hostname)
+      this.serverClients[hostname] = c
+      // all sync up to this point
+      await c.init()
+    }
+    return c
   }
 
   async init() {
-    const sc = await this.getServerClient()
-    if (this.clientState !== undefined) {
-      await sc.subscribeToChannel(this.
-        clientState.dmChannel.serverChannel.pubsubTopic)
+    while (this.beingInitialized) {
+      await new Promise(r => setTimeout(r, 100))
+    }
+    if (this.initialized) {
       return
     }
-    const serverChannel = this.proto.client.ServerChannel.create({
-      hostname: clientState.hostname,
-      pubsubTopic: await sc.createChannel(),
-    })
-    const dmEncKeypair = nacl.box.keyPair()
-    const dmSigKeypair = nacl.box.keyPair()
-    const dmChannel = this.proto.client.DmChannel.create({
-      serverChannel,
-      publicEncryptionKey: dmEncKeypair.publicKey,
-      publicSigningKey: dmSigKeypair.publicKey,
-    })
-    this.clientState = this.proto.client.ClientState.create({
-      dmChannel,
-      priDmSigningKey: dmSigKeypair.secretKey,
-      priDmEncryptionKey: dmEncKeypair.secretKey,
-    })
+    this.beingInitialized = true
+    await (async function setUpClientState() {
+      if (this.clientState !== undefined) {
+        return
+      }
+      const serverChannel = this.proto.client.ServerChannel.create({
+        hostname: clientState.hostname,
+        pubsubTopic: await sc.createChannel(),
+      })
+      const dmEncKeypair = nacl.box.keyPair()
+      const dmSigKeypair = nacl.box.keyPair()
+      const dmChannel = this.proto.client.DmChannel.create({
+        serverChannel,
+        publicEncryptionKey: dmEncKeypair.publicKey,
+        publicSigningKey: dmSigKeypair.publicKey,
+      })
+      this.clientState = this.proto.client.ClientState.create({
+        dmChannel,
+        priDmSigningKey: dmSigKeypair.secretKey,
+        priDmEncryptionKey: dmEncKeypair.secretKey,
+      })
+    }.bind(this))();
+
+    const sc = await this.getServerClient()
+    await sc.subscribeToChannel(this.
+      clientState.dmChannel.serverChannel.pubsubTopic)
+    this.initialized = true
+    this.beingInitialized = false
   }
 
   isContact(uuid) {
@@ -237,17 +258,6 @@ class DesertClient {
     this.ownedIdentity.contacts[uuid] = undefined
   }
 
-  async getServerClient(hostname) {
-    var c = this.serverClients[hostname]
-    if (c === undefined) {
-      c = new ServerClient(this.proto, hostname)
-      this.serverClients[hostname] = c
-      // all sync up to this point
-      await c.init()
-    }
-    return c
-  }
-
   // `datagram` is a proto.client.Datagram,
   //   will be mutated to contain nonce and seq number
   //   then wrapped in a SignedDatagram
@@ -262,6 +272,7 @@ class DesertClient {
     datagram,  // proto.client.Datagram
     includeIdentity
   }) {
+    await this.init()
     channelState.c2cSeq += 1
     datagram.sequenceNumber = channelState.c2cSeq
     const nonce = nacl.randomBytes(nacl.secretbox.nonceLength)
@@ -290,14 +301,24 @@ class DesertClient {
       dstHostname: hostname, nonce, payload: boxed, srcUuid: helloId(this.identity),
       dstChannelId: channelId
     })
-    if (includeIdentity) c2sDatagram.srcPublicSigningKey = this.signPair.publicKey
+    if (includeIdentity) {
+      c2sDatagram.srcPublicSigningKey = 
+        this.ownedIdentity.identity.pubSigningKey
+    }
     await (await this.getServerClient(hostname)).request(
       this.proto.server.C2sRequest.create({
-        tx: this.proto.server.TxRequest.create({datagram: c2sDatagram})
+        tx: this.proto.server.TxRequest.create({
+          datagram: c2sDatagram})
       }))
+  }
+
+  async createRoom(roomProfile) {
+    await this.init()
+    // TODO TODO TODO
   }
 }
 
+// TODO remove
 class RoomMasterClient extends Client {
   constructor(proto, ws, hostname) {
     super(proto, ws, hostname)
@@ -388,6 +409,7 @@ class RoomMasterClient extends Client {
   }
 }
 
+// TODO remove
 class RoomParticipantClient extends Client {
   constructor(proto, options) {
     super(proto, null, null, options)
@@ -674,6 +696,7 @@ const setup = async function() {
   return proto
 }
 
+// TODO remove all this
 var proto
 async function makeParticipantClient(options) {
   if (!proto) proto = await setup()
